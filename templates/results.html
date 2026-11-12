@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <title>My Flask App</title>
+
+    <style>
+        .album-container {
+            margin-bottom: 40px;
+        }
+
+        .album-header {
+            display: flex;
+            align-items: center;
+        }
+
+        .album-header img {
+            margin-right: 20px;
+        }
+
+        .track-list {
+            margin-top: 10px;
+        }
+
+        .track-list li {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Results</h1>
+
+    {% if result == "We've hit a rock! No match found for the song" %}
+        <p>{{ result }}</p>
+    {% else %}
+        <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}. Some of their other releases include:</p>
+        <div>
+            {% for album in result.albums_with_videos %}
+                <div class="album-container">
+                    <div class="album-header">
+                        {% if album[2]|length > 0 %}
+                            <img src="{{ album[2][0].thumb }}" alt="Album thumbnail">
+                        {% else %}
+                        <!-- This will be displayed when there are no elements in album[2] -->
+                            <p>No album thumbnail available.</p>
+                        {% endif %}
+
+                        <div>
+                            <h3>{{ album[0] }}</h3> <!-- Album title -->
+                            <p>Rating: {{ album[1] }}</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        {% for video in album[2] %}
+                            <li><a href="{{ video.link }}" target="_blank">{{ video.artist }} - {{ video.title }}</a></li> <!-- Track name with hyperlink -->
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <a href="/">Keep on digging 👷 </a>
+
+</body>
+
+</html>
+"""
