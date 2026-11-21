@@ -22,6 +22,13 @@
         <input type="submit" value="Submit">
     </form>
 
+    <div id="digging" style="display:none">
+        <hr>
+        <pre id="digger"></pre>
+        <p><b id="dig-msg">digging...</b> <span id="dig-time"></span></p>
+        <p><small>this can take up to half a minute. don't close the page.</small></p>
+    </div>
+
     <script>
     (function () {
         var input = document.getElementById("artist_name"), list = document.getElementById("artist_list");
@@ -42,6 +49,82 @@
                 }).catch(function () {});
             }, 300);
         });
+    })();
+    </script>
+
+    <script>
+    (function () {
+        // A little excavator digging a hole and dumping the dirt on a pile.
+        var CAB = [
+            "   ______      ",
+            "  | [] | |     ",
+            " _|____|_|____ ",
+            "|_____________|",
+            " (o)(o)(o)(o)  "
+        ];
+        var ARMS = [
+            ["      ____           ", "    _/    \\          ", "  _/      [_]        ", "_/                   ", "                     "],
+            ["                     ", "                     ", "  ____               ", "_/    \\__            ", "         [_]         "],
+            ["                     ", "     ___             ", "  __/   \\            ", "_/      [#]          ", "                     "],
+            ["      ___________    ", "    _/           \\   ", "  _/              [#]", "_/                 : ", "                   . "]
+        ];
+        var frame = 0, loads = 0, started = 0, timers = [];
+        var MSGS = {
+            label: ["looking up your song on Discogs...", "finding the label that first put it out...",
+                    "pulling records from the same era...", "lining up the YouTube videos..."],
+            uploader: ["finding your song on YouTube...", "finding who posted it...",
+                       "digging through their uploads...", "sorting the good stuff to the top..."]
+        };
+        function draw() {
+            var arm = ARMS[frame % 4];
+            var pile = Math.min(1 + Math.floor(loads / 3), 2);
+            var lines = [];
+            for (var i = 0; i < 5; i++) {
+                var row = CAB[i] + arm[i];
+                if (i >= 5 - pile) {
+                    var k = i - (5 - pile), col = 34 - k;  // a heap centred under where the bucket drops
+                    while (row.length < col) row += " ";
+                    row = row.slice(0, col) + new Array(2 * k + 2).join(":");
+                }
+                lines.push(row);
+            }
+            var ground = "~~~~~~~~~~~~~~~~~~~~~~~\\___/~~~~~~~~~";
+            lines.push(ground);
+            lines.push("  /!\\ CONSTRUCTION SITE /!\\");
+            document.getElementById("digger").textContent = lines.join("\n");
+            frame++;
+            if (frame % 4 === 0) loads++;
+        }
+        function start(mode) {
+            started = Date.now(); frame = 0; loads = 0;
+            document.getElementById("digging").style.display = "";
+            document.querySelector("form").style.display = "none";
+            var msgs = MSGS[mode] || MSGS.label, m = 0;
+            document.getElementById("dig-msg").textContent = msgs[0];
+            draw();
+            timers.push(setInterval(draw, 450));
+            timers.push(setInterval(function () {
+                var secs = Math.round((Date.now() - started) / 1000);
+                document.getElementById("dig-time").textContent = "(" + secs + "s)";
+            }, 1000));
+            timers.push(setInterval(function () {
+                m = Math.min(m + 1, msgs.length - 1);
+                document.getElementById("dig-msg").textContent = msgs[m];
+            }, 4000));
+        }
+        function stop() {
+            timers.forEach(clearInterval); timers = [];
+            document.getElementById("digging").style.display = "none";
+            document.querySelector("form").style.display = "";
+        }
+        document.querySelector("form").addEventListener("submit", function () {
+            var picked = document.querySelector("input[name=mode]:checked");
+            var song = document.getElementById("song_name").value.trim(), artist = document.getElementById("artist_name").value.trim();
+            if (song || artist) start(picked ? picked.value : "label");
+        });
+        // Coming back with the back button: show the form again, not a frozen digger.
+        window.addEventListener("pageshow", function (e) { if (e.persisted) stop(); });
+        window.diggerPreview = start;
     })();
     </script>
 </body>
