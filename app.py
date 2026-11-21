@@ -14,7 +14,8 @@ USER_AGENT = "DustyDigger/1.1 +https://dusty-digger.vercel.app"
 # and each album's track list is one request, so we look up a handful of albums
 # instead of 50, and stop early if the clock runs out.
 MAX_LABELS = 2
-MAX_ALBUMS = 12
+MAX_ALBUMS = 10
+RESERVE = 8  # requests per minute kept free so the next search's lookups always get through
 TIME_BUDGET = 20  # seconds per search
 
 NO_MATCH = "We've hit a rock! No match found for the song"
@@ -31,6 +32,7 @@ class Digger:
 
     def __init__(self, token):
         self.deadline = time.monotonic() + TIME_BUDGET
+        self.remaining = None  # Discogs tells us how many requests are left this minute
         self.session = requests.Session()
         self.session.headers.update({
             "Authorization": f"Discogs token={token}",
@@ -54,13 +56,14 @@ class Digger:
                 r = self.session.get(f"{API}{path}", params=params or None, timeout=min(8, self.time_left()))
             except requests.RequestException:
                 return None
+            try:
+                self.remaining = int(r.headers.get("X-Discogs-Ratelimit-Remaining"))
+            except (TypeError, ValueError):
+                pass
             if r.status_code == 429 and attempt == 0:
-                try:
-                    wait = float(r.headers.get("Retry-After") or 2)
-                except ValueError:
-                    wait = 2
-                if wait < self.time_left() - 2:
-                    time.sleep(min(wait, 5))
+                # Discogs counts a rolling minute, so a short pause usually frees a slot.
+                if self.time_left() > 6:
+                    time.sleep(3)
                     continue
                 return None
             if r.status_code != 200:
@@ -162,10 +165,12 @@ def dig_song(token, song_name, artist_name):
 
     albums = get_top_albums(dig, label_names, genre, exclude_id=song_id)
 
-    # Fetch track lists a few at a time; whatever misses the deadline shows without tracks.
+    # Track lists cost one request per album. Only spend what Discogs says we have left,
+    # keeping a reserve; albums beyond that still show, just without their tracks.
+    budget = len(albums) if dig.remaining is None else max(0, min(len(albums), dig.remaining - RESERVE))
     videos = {}
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(get_album_videos, dig, a["id"]): a["id"] for a in albums}
+        futures = {pool.submit(get_album_videos, dig, a["id"]): a["id"] for a in albums[:budget]}
         for fut in as_completed(futures):
             try:
                 videos[futures[fut]] = fut.result()
