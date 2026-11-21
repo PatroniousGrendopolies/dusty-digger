@@ -4,21 +4,9 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Dusty Digger</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>My Flask App</title>
 
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            max-width: 860px;
-            margin: 0 auto;
-            padding: 16px;
-            color: #1d1b16;
-            background: #faf7f0;
-        }
-
-        a { color: #a2461a; }
-
         .album-container {
             margin-bottom: 40px;
         }
@@ -40,80 +28,10 @@
             margin-bottom: 5px;
         }
 
-        .track-list li.playable { cursor: pointer; }
-        .track-list li.pending, .track-list li.none { opacity: .55; font-style: italic; list-style: none; }
-        .track-list li .play-here {
-            border: 0; background: none; color: #a2461a; cursor: pointer; font-size: 0.85em; padding: 0 6px;
-        }
-
-        /* ---- The player ---- */
-        .player {
-            background: #1d1b16;
-            color: #f4efe3;
-            border-radius: 16px;
-            padding: 14px;
-            margin: 18px 0 30px;
-            position: sticky;
-            top: 8px;
-            z-index: 5;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
-        }
-
-        .player .screen {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 16 / 9;
-            border-radius: 10px;
-            overflow: hidden;
-            background: #000;
-        }
-
-        .player .screen > div, .player .screen iframe {
-            position: absolute; inset: 0; width: 100%; height: 100%;
-        }
-
-        .player.compact .screen { aspect-ratio: auto; height: 0; }
-
-        .now {
-            display: flex; align-items: center; gap: 10px; margin-top: 12px; min-width: 0;
-        }
-        .now .info { flex: 1; min-width: 0; }
-        .now .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .now .sub { font-size: .85em; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .now .count { font-size: .8em; opacity: .6; white-space: nowrap; }
-
-        .controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-        .controls button {
-            border: 1px solid rgba(244, 239, 227, .25);
-            background: rgba(244, 239, 227, .08);
-            color: inherit;
-            border-radius: 999px;
-            padding: 8px 14px;
-            font: inherit;
-            font-size: .9em;
-            cursor: pointer;
-        }
-        .controls button:hover { background: rgba(244, 239, 227, .18); }
-        .controls button.primary { background: #d96e2b; border-color: #d96e2b; color: #fff; font-weight: 600; }
-        .controls button.kept { background: #f4efe3; color: #1d1b16; border-color: #f4efe3; }
-        .controls .spacer { flex: 1; }
-
-        .queue { margin-top: 12px; max-height: 190px; overflow: auto; border-top: 1px solid rgba(244, 239, 227, .15); padding-top: 6px; }
-        .queue ol { margin: 0; padding-left: 26px; }
-        .queue li { padding: 3px 0; cursor: pointer; font-size: .88em; opacity: .75; }
-        .queue li:hover { opacity: 1; }
-        .queue li.current { opacity: 1; font-weight: 600; color: #f0a96f; }
-        .queue li.skipped { text-decoration: line-through; opacity: .4; }
-        .queue li .heart { margin-left: 6px; }
-
-        .keepers { margin: 0 0 30px; }
-        .keepers h2 { font-size: 1.1em; margin-bottom: 6px; }
-        .keepers ul { margin: 0; padding-left: 20px; }
-        .keepers li { margin-bottom: 4px; }
-        .keepers .empty { opacity: .6; font-size: .9em; }
-        .keepers button { border: 0; background: none; color: #a2461a; cursor: pointer; font-size: .85em; }
-
-        .hint { font-size: .8em; opacity: .55; margin-top: 8px; }
+        .current { font-weight: bold; }
+        .skipped { text-decoration: line-through; color: gray; }
+        .queue li { cursor: pointer; }
+        .compact #yt, .compact iframe { display: none; }
     </style>
 </head>
 
@@ -127,33 +45,24 @@
         <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}{% if result.year %} in {{ result.year }}{% endif %}.{% if result.albums %} Here's what else they released {% if result.year %}around then ({{ result.year - 4 }} to {{ result.year + 4 }}) {% endif %}in the same style:{% else %} We couldn't dig up other releases from them {% if result.year %}from that era {% endif %}this time.{% endif %}</p>
 
         {% if result.albums %}
-        <section class="player" id="player" aria-label="Dusty Digger player">
-            <div class="screen"><div id="yt"></div></div>
-            <div class="now">
-                <div class="info">
-                    <div class="title" id="now-title">Digging up the first track…</div>
-                    <div class="sub" id="now-sub"></div>
-                </div>
-                <div class="count" id="now-count"></div>
-            </div>
-            <div class="controls">
-                <button type="button" id="btn-prev" title="Previous track (←)">⏮ Back</button>
-                <button type="button" id="btn-play" title="Play / pause (space)">⏯ Play</button>
-                <button type="button" id="btn-next" class="primary" title="Skip to the next track (→ or N)">Skip ⏭</button>
-                <button type="button" id="btn-keep" title="Keep this one (K)">♡ Keep</button>
-                <span class="spacer"></span>
-                <button type="button" id="btn-shuffle" title="Shuffle the rest">Shuffle</button>
-                <button type="button" id="btn-size" title="Hide or show the video">Hide video</button>
-            </div>
+        <div id="player">
+            <hr>
+            <b>Player</b><br>
+            <div id="yt"></div>
+            <p>Now playing: <span id="now-title">Digging up the first track...</span> <span id="now-sub"></span> <span id="now-count"></span></p>
+            <button type="button" id="btn-prev">&lt;&lt; back</button>
+            <button type="button" id="btn-play">play/pause</button>
+            <button type="button" id="btn-next">skip &gt;&gt;</button>
+            <button type="button" id="btn-keep">keep</button>
+            <button type="button" id="btn-shuffle">shuffle</button>
+            <button type="button" id="btn-size">hide video</button>
+            <p><small>keys: right arrow or N = skip, left arrow = back, K = keep, space = play/pause. songs that won't play get skipped.</small></p>
             <div class="queue"><ol id="queue"></ol></div>
-            <div class="hint">Keys: → or N skip · ← back · K keep · space play/pause. Tracks that can't play here are skipped automatically.</div>
-        </section>
-
-        <section class="keepers">
-            <h2>♥ Keepers</h2>
+            <p><b>Keepers:</b></p>
             <ul id="keepers"></ul>
-            <div class="empty" id="keepers-empty">Hit "Keep" on the good ones and they'll collect here (saved in this browser).</div>
-        </section>
+            <p id="keepers-empty"><small>none yet. hit keep on the good ones. saved in your browser.</small></p>
+            <hr>
+        </div>
         {% endif %}
 
         <div>
@@ -172,10 +81,10 @@
                         {% for video in album.tracks %}
                             <li>
                                 <a href="{{ video.link }}" target="_blank" rel="noopener">{{ video.artist }} - {{ video.title }}</a>
-                                {% if video.yt %}<button type="button" class="play-here" data-yt="{{ video.yt }}" title="Play in the player">▶ play here</button>{% endif %}
+                                {% if video.yt %}<a href="#" class="play-here" data-yt="{{ video.yt }}">[play here]</a>{% endif %}
                             </li>
                         {% endfor %}
-                        {% if album.pending %}<li class="pending" data-pending="{{ album.id }}">Digging up tracks…</li>
+                        {% if album.pending %}<li class="pending" data-pending="{{ album.id }}">digging up tracks...</li>
                         {% elif not album.tracks %}<li class="none">No videos on Discogs for this one.</li>{% endif %}
                     </ul>
                 </div>
@@ -206,7 +115,7 @@
                 order.forEach(function (ti, i) {
                     var t = tracks[ti], li = document.createElement("li");
                     li.textContent = t.artist + " - " + t.title;
-                    if (isKept(t)) { var h = document.createElement("span"); h.className = "heart"; h.textContent = "♥"; li.appendChild(h); }
+                    if (isKept(t)) { var h = document.createElement("span"); h.className = "heart"; h.textContent = " (kept)"; li.appendChild(h); }
                     if (i === pos) li.className = "current";
                     else if (skipped[t.id]) li.className = "skipped";
                     li.onclick = function () { go(i); };
@@ -217,15 +126,14 @@
             }
 
             function renderNow() {
-                var more = pendingAlbums.length ? " · digging up more…" : "";
-                if (!hasTracks()) { $("now-count").textContent = pendingAlbums.length ? "digging…" : ""; if (!pendingAlbums.length) $("now-title").textContent = "No playable videos found for these records."; return; }
+                var more = pendingAlbums.length ? " still digging..." : "";
+                if (!hasTracks()) { $("now-count").textContent = pendingAlbums.length ? "(still digging...)" : ""; if (!pendingAlbums.length) $("now-title").textContent = "no playable videos found for these records."; return; }
                 var t = current();
                 $("now-title").textContent = t.artist + " - " + t.title;
-                $("now-sub").textContent = t.album;
-                $("now-count").textContent = (pos + 1) + " / " + order.length + more;
+                $("now-sub").textContent = "(from " + t.album + ")";
+                $("now-count").textContent = "[" + (pos + 1) + " of " + order.length + "]" + more;
                 var kept = isKept(t);
-                $("btn-keep").textContent = kept ? "♥ Kept" : "♡ Keep";
-                $("btn-keep").className = kept ? "kept" : "";
+                $("btn-keep").textContent = kept ? "un-keep" : "keep";
             }
 
             function renderKeepers() {
@@ -264,8 +172,8 @@
                 if (markSkipped) skipped[current().id] = true;
                 var i = step(pos, 1);
                 if (i >= 0) go(i);
-                else if (pendingAlbums.length) { ended = true; $("now-title").textContent = "Digging up more tracks, the next one starts as soon as it lands…"; $("now-sub").textContent = ""; }
-                else { $("now-title").textContent = "End of the dig. Keep on digging 👷"; $("now-sub").textContent = ""; }
+                else if (pendingAlbums.length) { ended = true; $("now-title").textContent = "still digging, next song starts when it shows up..."; $("now-sub").textContent = ""; }
+                else { $("now-title").textContent = "end of the list."; $("now-sub").textContent = ""; }
             }
 
             function toggleKeep() {
@@ -293,14 +201,15 @@
             };
             $("btn-size").onclick = function () {
                 var p = $("player"); p.classList.toggle("compact");
-                this.textContent = p.classList.contains("compact") ? "Show video" : "Hide video";
+                this.textContent = p.classList.contains("compact") ? "show video" : "hide video";
             };
             document.addEventListener("click", function (e) {
                 var b = e.target.closest && e.target.closest(".play-here");
                 if (!b) return;
+                e.preventDefault();
                 var id = b.getAttribute("data-yt");
                 var i = order.findIndex(function (ti) { return tracks[ti].id === id; });
-                if (i >= 0) { go(i); $("player").scrollIntoView({ behavior: "smooth", block: "start" }); }
+                if (i >= 0) { go(i); $("player").scrollIntoView(); }
             });
 
             // ---- Fetch the albums the server didn't have room for, a few seconds apart
@@ -321,7 +230,7 @@
                         var item = document.createElement("li"), a = document.createElement("a");
                         a.href = v.link; a.target = "_blank"; a.rel = "noopener"; a.textContent = v.artist + " - " + v.title;
                         item.appendChild(a);
-                        if (v.yt) { var b = document.createElement("button"); b.type = "button"; b.className = "play-here"; b.setAttribute("data-yt", v.yt); b.title = "Play in the player"; b.textContent = "▶ play here"; item.appendChild(document.createTextNode(" ")); item.appendChild(b); }
+                        if (v.yt) { var b = document.createElement("a"); b.href = "#"; b.className = "play-here"; b.setAttribute("data-yt", v.yt); b.textContent = "[play here]"; item.appendChild(document.createTextNode(" ")); item.appendChild(b); }
                         ul.appendChild(item);
                     }
                     if (v.yt && !seenIds[v.yt]) {
@@ -366,13 +275,14 @@
             function startPlayer() {
                 if (!apiReady || player || !hasTracks()) return;
                 player = new YT.Player("yt", {
+                    width: 480, height: 270,
                     videoId: current().id,
                     playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
                     events: {
                         onReady: function () { ready = true; },
                         onStateChange: function (e) {
-                            if (e.data === YT.PlayerState.PLAYING) { failures = 0; $("btn-play").textContent = "⏸ Pause"; }
-                            else if (e.data === YT.PlayerState.PAUSED) $("btn-play").textContent = "▶ Play";
+                            if (e.data === YT.PlayerState.PLAYING) { failures = 0; /* playing */ }
+                            else if (e.data === YT.PlayerState.PAUSED) { /* paused */ }
                             else if (e.data === YT.PlayerState.ENDED) next(false);
                         },
                         onError: function () {
