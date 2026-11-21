@@ -41,6 +41,7 @@
         }
 
         .track-list li.playable { cursor: pointer; }
+        .track-list li.pending, .track-list li.none { opacity: .55; font-style: italic; list-style: none; }
         .track-list li .play-here {
             border: 0; background: none; color: #a2461a; cursor: pointer; font-size: 0.85em; padding: 0 6px;
         }
@@ -123,14 +124,14 @@
     {% if result is string %}
         <p>{{ result }}</p>
     {% else %}
-        <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}.{% if result.albums_with_videos %} Some of their other releases include:{% else %} We couldn't dig up other releases from them this time.{% endif %}</p>
+        <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}{% if result.year %} in {{ result.year }}{% endif %}.{% if result.albums %} Here's what else they released {% if result.year %}around then ({{ result.year - 4 }} to {{ result.year + 4 }}) {% endif %}in the same style:{% else %} We couldn't dig up other releases from them {% if result.year %}from that era {% endif %}this time.{% endif %}</p>
 
-        {% if result.playlist %}
+        {% if result.albums %}
         <section class="player" id="player" aria-label="Dusty Digger player">
             <div class="screen"><div id="yt"></div></div>
             <div class="now">
                 <div class="info">
-                    <div class="title" id="now-title">Loading the first track…</div>
+                    <div class="title" id="now-title">Digging up the first track…</div>
                     <div class="sub" id="now-sub"></div>
                 </div>
                 <div class="count" id="now-count"></div>
@@ -156,39 +157,41 @@
         {% endif %}
 
         <div>
-            {% for album in result.albums_with_videos %}
-                <div class="album-container">
+            {% for album in result.albums %}
+                <div class="album-container" data-album="{{ album.id }}">
                     <div class="album-header">
-                        {% if album[2]|length > 0 %}
-                            <img src="{{ album[2][0].thumb }}" alt="Album thumbnail">
-                        {% else %}
-                            <p>No album thumbnail available.</p>
+                        {% if album.tracks and album.tracks[0].thumb %}
+                            <img src="{{ album.tracks[0].thumb }}" alt="Album thumbnail">
                         {% endif %}
-
                         <div>
-                            <h3>{{ album[0] }}</h3>
-                            <p>Rating: {{ album[1] }}</p>
+                            <h3>{{ album.title }}</h3>
+                            <p>Rating: {{ album.rating }}</p>
                         </div>
                     </div>
                     <ul class="track-list">
-                        {% for video in album[2] %}
+                        {% for video in album.tracks %}
                             <li>
                                 <a href="{{ video.link }}" target="_blank" rel="noopener">{{ video.artist }} - {{ video.title }}</a>
                                 {% if video.yt %}<button type="button" class="play-here" data-yt="{{ video.yt }}" title="Play in the player">▶ play here</button>{% endif %}
                             </li>
                         {% endfor %}
+                        {% if album.pending %}<li class="pending" data-pending="{{ album.id }}">Digging up tracks…</li>
+                        {% elif not album.tracks %}<li class="none">No videos on Discogs for this one.</li>{% endif %}
                     </ul>
                 </div>
             {% endfor %}
         </div>
 
-        {% if result.playlist %}
+        {% if result.albums %}
         <script>
         (function () {
             var tracks = {{ result.playlist|tojson }};
+            var pendingAlbums = {{ result.albums|selectattr("pending")|map(attribute="id")|list|tojson }};
+            var albumTitles = {}; {% for a in result.albums %}albumTitles[{{ a.id }}] = {{ a.title|tojson }};{% endfor %}
+            var seenIds = {}; tracks.forEach(function (t) { seenIds[t.id] = true; });
             var order = tracks.map(function (_, i) { return i; });
             var pos = 0, player = null, ready = false, failures = 0;
-            var skipped = {}, broken = {}, dir = 1;
+            var skipped = {}, broken = {}, dir = 1, ended = false;
             var KEY = "dustyDiggerKeepers";
 
             function $(id) { return document.getElementById(id); }
@@ -196,6 +199,7 @@
             function saveKeepers(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
             function isKept(t) { return keepers().some(function (k) { return k.id === t.id; }); }
             function current() { return tracks[order[pos]]; }
+            function hasTracks() { return order.length > 0; }
 
             function renderQueue() {
                 var ol = $("queue"); ol.innerHTML = "";
@@ -213,10 +217,12 @@
             }
 
             function renderNow() {
+                var more = pendingAlbums.length ? " · digging up more…" : "";
+                if (!hasTracks()) { $("now-count").textContent = pendingAlbums.length ? "digging…" : ""; if (!pendingAlbums.length) $("now-title").textContent = "No playable videos found for these records."; return; }
                 var t = current();
                 $("now-title").textContent = t.artist + " - " + t.title;
                 $("now-sub").textContent = t.album;
-                $("now-count").textContent = (pos + 1) + " / " + order.length;
+                $("now-count").textContent = (pos + 1) + " / " + order.length + more;
                 var kept = isKept(t);
                 $("btn-keep").textContent = kept ? "♥ Kept" : "♡ Keep";
                 $("btn-keep").className = kept ? "kept" : "";
@@ -240,6 +246,7 @@
 
             function go(i) {
                 if (i < 0 || i >= order.length) return;
+                ended = false;
                 dir = i >= pos ? 1 : -1;
                 pos = i;
                 renderAll();
@@ -257,10 +264,12 @@
                 if (markSkipped) skipped[current().id] = true;
                 var i = step(pos, 1);
                 if (i >= 0) go(i);
+                else if (pendingAlbums.length) { ended = true; $("now-title").textContent = "Digging up more tracks, the next one starts as soon as it lands…"; $("now-sub").textContent = ""; }
                 else { $("now-title").textContent = "End of the dig. Keep on digging 👷"; $("now-sub").textContent = ""; }
             }
 
             function toggleKeep() {
+                if (!hasTracks()) return;
                 var t = current(), list = keepers();
                 if (isKept(t)) list = list.filter(function (k) { return k.id !== t.id; });
                 else list.push({ id: t.id, title: t.title, artist: t.artist, album: t.album, link: t.link });
@@ -286,13 +295,59 @@
                 var p = $("player"); p.classList.toggle("compact");
                 this.textContent = p.classList.contains("compact") ? "Show video" : "Hide video";
             };
-            document.querySelectorAll(".play-here").forEach(function (b) {
-                b.onclick = function () {
-                    var id = b.getAttribute("data-yt");
-                    var i = order.findIndex(function (ti) { return tracks[ti].id === id; });
-                    if (i >= 0) { go(i); $("player").scrollIntoView({ behavior: "smooth", block: "start" }); }
-                };
+            document.addEventListener("click", function (e) {
+                var b = e.target.closest && e.target.closest(".play-here");
+                if (!b) return;
+                var id = b.getAttribute("data-yt");
+                var i = order.findIndex(function (ti) { return tracks[ti].id === id; });
+                if (i >= 0) { go(i); $("player").scrollIntoView({ behavior: "smooth", block: "start" }); }
             });
+
+            // ---- Fetch the albums the server didn't have room for, a few seconds apart
+            //      (Discogs allows ~60 lookups a minute), and add their songs to the playlist.
+            function addAlbumTracks(albumId, list) {
+                var li = document.querySelector('[data-pending="' + albumId + '"]');
+                var ul = li && li.parentNode;
+                if (li) li.remove();
+                var title = albumTitles[albumId] || "";
+                if (ul && !list.length) { var n = document.createElement("li"); n.className = "none"; n.textContent = "No videos on Discogs for this one."; ul.appendChild(n); }
+                if (ul && list.length && list[0].thumb) {
+                    var head = ul.parentNode.querySelector(".album-header");
+                    if (head && !head.querySelector("img")) { var img = document.createElement("img"); img.src = list[0].thumb; img.alt = "Album thumbnail"; head.insertBefore(img, head.firstChild); }
+                }
+                var wasEmpty = !hasTracks();
+                list.forEach(function (v) {
+                    if (ul) {
+                        var item = document.createElement("li"), a = document.createElement("a");
+                        a.href = v.link; a.target = "_blank"; a.rel = "noopener"; a.textContent = v.artist + " - " + v.title;
+                        item.appendChild(a);
+                        if (v.yt) { var b = document.createElement("button"); b.type = "button"; b.className = "play-here"; b.setAttribute("data-yt", v.yt); b.title = "Play in the player"; b.textContent = "▶ play here"; item.appendChild(document.createTextNode(" ")); item.appendChild(b); }
+                        ul.appendChild(item);
+                    }
+                    if (v.yt && !seenIds[v.yt]) {
+                        seenIds[v.yt] = true;
+                        tracks.push({ id: v.yt, title: v.title, artist: v.artist, album: title, link: v.link });
+                        order.push(tracks.length - 1);
+                    }
+                });
+                if (wasEmpty && hasTracks()) { pos = 0; startPlayer(); }
+                else if (ended && pos < order.length - 1) next(false);
+                renderNow(); renderQueue();
+            }
+
+            function loadMore() {
+                if (!pendingAlbums.length) { renderNow(); return; }
+                var id = pendingAlbums[0], tries = 0;
+                (function attempt() {
+                    fetch("/tracks/" + id).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+                    .then(function (res) {
+                        if (res.ok) { pendingAlbums.shift(); addAlbumTracks(id, res.j.tracks || []); setTimeout(loadMore, 1100); }
+                        else if (++tries < 6) setTimeout(attempt, ((res.j && res.j.retry) || 5) * 1000);
+                        else { pendingAlbums.shift(); addAlbumTracks(id, []); setTimeout(loadMore, 1100); }
+                    })
+                    .catch(function () { if (++tries < 6) setTimeout(attempt, 5000); else { pendingAlbums.shift(); setTimeout(loadMore, 1100); } });
+                })();
+            }
             document.addEventListener("keydown", function (e) {
                 if (/input|textarea/i.test((e.target.tagName || ""))) return;
                 if (e.key === "ArrowRight" || e.key === "n" || e.key === "N") { next(true); e.preventDefault(); }
@@ -305,8 +360,11 @@
             });
 
             renderAll();
+            setTimeout(loadMore, 1500);
 
-            window.onYouTubeIframeAPIReady = function () {
+            var apiReady = false;
+            function startPlayer() {
+                if (!apiReady || player || !hasTracks()) return;
                 player = new YT.Player("yt", {
                     videoId: current().id,
                     playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
@@ -327,7 +385,8 @@
                         }
                     }
                 });
-            };
+            }
+            window.onYouTubeIframeAPIReady = function () { apiReady = true; startPlayer(); };
             var s = document.createElement("script");
             s.src = "https://www.youtube.com/iframe_api";
             document.head.appendChild(s);
