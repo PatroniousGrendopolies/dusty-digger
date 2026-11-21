@@ -3,9 +3,22 @@
 <html>
 
 <head>
-    <title>My Flask App</title>
+    <meta charset="utf-8">
+    <title>Dusty Digger</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 16px;
+            color: #1d1b16;
+            background: #faf7f0;
+        }
+
+        a { color: #a2461a; }
+
         .album-container {
             margin-bottom: 40px;
         }
@@ -26,6 +39,80 @@
         .track-list li {
             margin-bottom: 5px;
         }
+
+        .track-list li.playable { cursor: pointer; }
+        .track-list li .play-here {
+            border: 0; background: none; color: #a2461a; cursor: pointer; font-size: 0.85em; padding: 0 6px;
+        }
+
+        /* ---- The player ---- */
+        .player {
+            background: #1d1b16;
+            color: #f4efe3;
+            border-radius: 16px;
+            padding: 14px;
+            margin: 18px 0 30px;
+            position: sticky;
+            top: 8px;
+            z-index: 5;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+        }
+
+        .player .screen {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .player .screen > div, .player .screen iframe {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+        }
+
+        .player.compact .screen { aspect-ratio: auto; height: 0; }
+
+        .now {
+            display: flex; align-items: center; gap: 10px; margin-top: 12px; min-width: 0;
+        }
+        .now .info { flex: 1; min-width: 0; }
+        .now .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .now .sub { font-size: .85em; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .now .count { font-size: .8em; opacity: .6; white-space: nowrap; }
+
+        .controls { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+        .controls button {
+            border: 1px solid rgba(244, 239, 227, .25);
+            background: rgba(244, 239, 227, .08);
+            color: inherit;
+            border-radius: 999px;
+            padding: 8px 14px;
+            font: inherit;
+            font-size: .9em;
+            cursor: pointer;
+        }
+        .controls button:hover { background: rgba(244, 239, 227, .18); }
+        .controls button.primary { background: #d96e2b; border-color: #d96e2b; color: #fff; font-weight: 600; }
+        .controls button.kept { background: #f4efe3; color: #1d1b16; border-color: #f4efe3; }
+        .controls .spacer { flex: 1; }
+
+        .queue { margin-top: 12px; max-height: 190px; overflow: auto; border-top: 1px solid rgba(244, 239, 227, .15); padding-top: 6px; }
+        .queue ol { margin: 0; padding-left: 26px; }
+        .queue li { padding: 3px 0; cursor: pointer; font-size: .88em; opacity: .75; }
+        .queue li:hover { opacity: 1; }
+        .queue li.current { opacity: 1; font-weight: 600; color: #f0a96f; }
+        .queue li.skipped { text-decoration: line-through; opacity: .4; }
+        .queue li .heart { margin-left: 6px; }
+
+        .keepers { margin: 0 0 30px; }
+        .keepers h2 { font-size: 1.1em; margin-bottom: 6px; }
+        .keepers ul { margin: 0; padding-left: 20px; }
+        .keepers li { margin-bottom: 4px; }
+        .keepers .empty { opacity: .6; font-size: .9em; }
+        .keepers button { border: 0; background: none; color: #a2461a; cursor: pointer; font-size: .85em; }
+
+        .hint { font-size: .8em; opacity: .55; margin-top: 8px; }
     </style>
 </head>
 
@@ -37,6 +124,37 @@
         <p>{{ result }}</p>
     {% else %}
         <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}.{% if result.albums_with_videos %} Some of their other releases include:{% else %} We couldn't dig up other releases from them this time.{% endif %}</p>
+
+        {% if result.playlist %}
+        <section class="player" id="player" aria-label="Dusty Digger player">
+            <div class="screen"><div id="yt"></div></div>
+            <div class="now">
+                <div class="info">
+                    <div class="title" id="now-title">Loading the first track…</div>
+                    <div class="sub" id="now-sub"></div>
+                </div>
+                <div class="count" id="now-count"></div>
+            </div>
+            <div class="controls">
+                <button type="button" id="btn-prev" title="Previous track (←)">⏮ Back</button>
+                <button type="button" id="btn-play" title="Play / pause (space)">⏯ Play</button>
+                <button type="button" id="btn-next" class="primary" title="Skip to the next track (→ or N)">Skip ⏭</button>
+                <button type="button" id="btn-keep" title="Keep this one (K)">♡ Keep</button>
+                <span class="spacer"></span>
+                <button type="button" id="btn-shuffle" title="Shuffle the rest">Shuffle</button>
+                <button type="button" id="btn-size" title="Hide or show the video">Hide video</button>
+            </div>
+            <div class="queue"><ol id="queue"></ol></div>
+            <div class="hint">Keys: → or N skip · ← back · K keep · space play/pause. Tracks that can't play here are skipped automatically.</div>
+        </section>
+
+        <section class="keepers">
+            <h2>♥ Keepers</h2>
+            <ul id="keepers"></ul>
+            <div class="empty" id="keepers-empty">Hit "Keep" on the good ones and they'll collect here (saved in this browser).</div>
+        </section>
+        {% endif %}
+
         <div>
             {% for album in result.albums_with_videos %}
                 <div class="album-container">
@@ -44,23 +162,178 @@
                         {% if album[2]|length > 0 %}
                             <img src="{{ album[2][0].thumb }}" alt="Album thumbnail">
                         {% else %}
-                        <!-- This will be displayed when there are no elements in album[2] -->
                             <p>No album thumbnail available.</p>
                         {% endif %}
 
                         <div>
-                            <h3>{{ album[0] }}</h3> <!-- Album title -->
+                            <h3>{{ album[0] }}</h3>
                             <p>Rating: {{ album[1] }}</p>
                         </div>
                     </div>
                     <ul class="track-list">
                         {% for video in album[2] %}
-                            <li><a href="{{ video.link }}" target="_blank">{{ video.artist }} - {{ video.title }}</a></li> <!-- Track name with hyperlink -->
+                            <li>
+                                <a href="{{ video.link }}" target="_blank" rel="noopener">{{ video.artist }} - {{ video.title }}</a>
+                                {% if video.yt %}<button type="button" class="play-here" data-yt="{{ video.yt }}" title="Play in the player">▶ play here</button>{% endif %}
+                            </li>
                         {% endfor %}
                     </ul>
                 </div>
             {% endfor %}
         </div>
+
+        {% if result.playlist %}
+        <script>
+        (function () {
+            var tracks = {{ result.playlist|tojson }};
+            var order = tracks.map(function (_, i) { return i; });
+            var pos = 0, player = null, ready = false, failures = 0;
+            var skipped = {}, broken = {}, dir = 1;
+            var KEY = "dustyDiggerKeepers";
+
+            function $(id) { return document.getElementById(id); }
+            function keepers() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
+            function saveKeepers(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
+            function isKept(t) { return keepers().some(function (k) { return k.id === t.id; }); }
+            function current() { return tracks[order[pos]]; }
+
+            function renderQueue() {
+                var ol = $("queue"); ol.innerHTML = "";
+                order.forEach(function (ti, i) {
+                    var t = tracks[ti], li = document.createElement("li");
+                    li.textContent = t.artist + " - " + t.title;
+                    if (isKept(t)) { var h = document.createElement("span"); h.className = "heart"; h.textContent = "♥"; li.appendChild(h); }
+                    if (i === pos) li.className = "current";
+                    else if (skipped[t.id]) li.className = "skipped";
+                    li.onclick = function () { go(i); };
+                    ol.appendChild(li);
+                });
+                var cur = ol.children[pos];
+                if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest" });
+            }
+
+            function renderNow() {
+                var t = current();
+                $("now-title").textContent = t.artist + " - " + t.title;
+                $("now-sub").textContent = t.album;
+                $("now-count").textContent = (pos + 1) + " / " + order.length;
+                var kept = isKept(t);
+                $("btn-keep").textContent = kept ? "♥ Kept" : "♡ Keep";
+                $("btn-keep").className = kept ? "kept" : "";
+            }
+
+            function renderKeepers() {
+                var list = keepers(), ul = $("keepers"); ul.innerHTML = "";
+                $("keepers-empty").style.display = list.length ? "none" : "";
+                list.forEach(function (k) {
+                    var li = document.createElement("li"), a = document.createElement("a");
+                    a.href = k.link || ("https://www.youtube.com/watch?v=" + k.id); a.target = "_blank"; a.rel = "noopener";
+                    a.textContent = k.artist + " - " + k.title;
+                    var rm = document.createElement("button"); rm.type = "button"; rm.textContent = "remove";
+                    rm.onclick = function () { saveKeepers(keepers().filter(function (x) { return x.id !== k.id; })); renderAll(); };
+                    li.appendChild(a); li.appendChild(document.createTextNode(" ")); li.appendChild(rm);
+                    ul.appendChild(li);
+                });
+            }
+
+            function renderAll() { renderNow(); renderQueue(); renderKeepers(); }
+
+            function go(i) {
+                if (i < 0 || i >= order.length) return;
+                dir = i >= pos ? 1 : -1;
+                pos = i;
+                renderAll();
+                if (ready) player.loadVideoById(current().id);
+            }
+
+            // Step over tracks YouTube already refused, in the direction we're moving.
+            function step(from, d) {
+                for (var i = from + d; i >= 0 && i < order.length; i += d) if (!broken[tracks[order[i]].id]) return i;
+                return -1;
+            }
+            function back() { var i = step(pos, -1); if (i >= 0) go(i); }
+
+            function next(markSkipped) {
+                if (markSkipped) skipped[current().id] = true;
+                var i = step(pos, 1);
+                if (i >= 0) go(i);
+                else { $("now-title").textContent = "End of the dig. Keep on digging 👷"; $("now-sub").textContent = ""; }
+            }
+
+            function toggleKeep() {
+                var t = current(), list = keepers();
+                if (isKept(t)) list = list.filter(function (k) { return k.id !== t.id; });
+                else list.push({ id: t.id, title: t.title, artist: t.artist, album: t.album, link: t.link });
+                saveKeepers(list); renderAll();
+            }
+
+            function shuffle() {
+                var cur = order[pos], rest = order.filter(function (_, i) { return i > pos; });
+                for (var i = rest.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var x = rest[i]; rest[i] = rest[j]; rest[j] = x; }
+                order = order.slice(0, pos).concat([cur], rest);
+                renderAll();
+            }
+
+            $("btn-next").onclick = function () { next(true); };
+            $("btn-prev").onclick = back;
+            $("btn-keep").onclick = toggleKeep;
+            $("btn-shuffle").onclick = shuffle;
+            $("btn-play").onclick = function () {
+                if (!ready) return;
+                if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+            };
+            $("btn-size").onclick = function () {
+                var p = $("player"); p.classList.toggle("compact");
+                this.textContent = p.classList.contains("compact") ? "Show video" : "Hide video";
+            };
+            document.querySelectorAll(".play-here").forEach(function (b) {
+                b.onclick = function () {
+                    var id = b.getAttribute("data-yt");
+                    var i = order.findIndex(function (ti) { return tracks[ti].id === id; });
+                    if (i >= 0) { go(i); $("player").scrollIntoView({ behavior: "smooth", block: "start" }); }
+                };
+            });
+            document.addEventListener("keydown", function (e) {
+                if (/input|textarea/i.test((e.target.tagName || ""))) return;
+                if (e.key === "ArrowRight" || e.key === "n" || e.key === "N") { next(true); e.preventDefault(); }
+                else if (e.key === "ArrowLeft") { back(); e.preventDefault(); }
+                else if (e.key === "k" || e.key === "K") { toggleKeep(); }
+                else if (e.key === " " && ready) {
+                    e.preventDefault();
+                    if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+                }
+            });
+
+            renderAll();
+
+            window.onYouTubeIframeAPIReady = function () {
+                player = new YT.Player("yt", {
+                    videoId: current().id,
+                    playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+                    events: {
+                        onReady: function () { ready = true; },
+                        onStateChange: function (e) {
+                            if (e.data === YT.PlayerState.PLAYING) { failures = 0; $("btn-play").textContent = "⏸ Pause"; }
+                            else if (e.data === YT.PlayerState.PAUSED) $("btn-play").textContent = "▶ Play";
+                            else if (e.data === YT.PlayerState.ENDED) next(false);
+                        },
+                        onError: function () {
+                            // Removed or not allowed outside YouTube: move on (stop after many in a row).
+                            broken[current().id] = skipped[current().id] = true;
+                            if (++failures >= 15) return;
+                            var i = step(pos, dir);
+                            if (i < 0) i = step(pos, -dir);
+                            if (i >= 0) { var keepDir = dir; go(i); dir = keepDir; }
+                        }
+                    }
+                });
+            };
+            var s = document.createElement("script");
+            s.src = "https://www.youtube.com/iframe_api";
+            document.head.appendChild(s);
+        })();
+        </script>
+        {% endif %}
     {% endif %}
 
     <a href="/">Keep on digging 👷 </a>

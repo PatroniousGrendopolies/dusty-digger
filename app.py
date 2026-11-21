@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -127,6 +128,14 @@ def get_top_albums(dig, label_names, genre, exclude_id=None, num_albums=MAX_ALBU
     return albums[:num_albums]
 
 
+YOUTUBE_ID = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+
+
+def youtube_id(url):
+    m = YOUTUBE_ID.search(url or "")
+    return m.group(1) if m else None
+
+
 def get_album_videos(dig, album_id):
     data = dig.get(f"/releases/{album_id}")
     if not data:
@@ -135,7 +144,8 @@ def get_album_videos(dig, album_id):
     artist = artists[0].get("name", "Unknown artist")
     thumb = data.get("thumb") or ""
     return [
-        {"link": v.get("uri"), "thumb": thumb, "artist": artist, "title": v.get("title", "Untitled")}
+        {"link": v.get("uri"), "thumb": thumb, "artist": artist, "title": v.get("title", "Untitled"),
+         "yt": youtube_id(v.get("uri"))}
         for v in data.get("videos") or []
         if v.get("embed") and v.get("uri")
     ]
@@ -177,10 +187,18 @@ def dig_song(token, song_name, artist_name):
             except Exception:
                 videos[futures[fut]] = []
 
-    return {
-        "label_names": label_names,
-        "albums_with_videos": [(album_title(a), popularity(a), videos.get(a["id"], [])) for a in albums],
-    }
+    albums_with_videos = [(album_title(a), popularity(a), videos.get(a["id"], [])) for a in albums]
+
+    # One playlist of every playable YouTube track, album by album, no duplicates.
+    playlist, seen = [], set()
+    for title, _, tracks in albums_with_videos:
+        for v in tracks:
+            if v.get("yt") and v["yt"] not in seen:
+                seen.add(v["yt"])
+                playlist.append({"id": v["yt"], "title": v["title"], "artist": v["artist"],
+                                 "album": title, "thumb": v["thumb"], "link": v["link"]})
+
+    return {"label_names": label_names, "albums_with_videos": albums_with_videos, "playlist": playlist}
 
 
 @app.route("/", methods=["GET", "POST"])
