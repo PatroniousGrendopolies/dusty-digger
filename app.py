@@ -102,6 +102,7 @@ def search_song(dig, song_name, artist_name):
              if str(y or "").isdigit() and int(y) > 0]
     return {
         "id": release_id,
+        "name": display_title(artist_names(release.get("artists")), release.get("title") or ""),
         "master_id": master_id,
         "year": min(int(y) for y in years) if years else None,
         "genres": release.get("genres") or first.get("genre") or [],
@@ -192,19 +193,57 @@ def youtube_id(url):
     return m.group(1) if m else None
 
 
+def artist_names(artists):
+    """Discogs artist credits -> 'A & B'; drops the '(2)' disambiguation numbers and '*'."""
+    out = []
+    for a in artists or []:
+        name = re.sub(r"\s*\(\d+\)$", "", (a.get("anv") or a.get("name") or "").strip()).rstrip("*")
+        if name:
+            out.append(name + ((" " + a["join"].strip()) if a.get("join", "").strip() and a["join"].strip() != "," else ""))
+    return " ".join(out).strip(" &,") or None
+
+
+def norm(text):
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
+def track_artist_for(video_title, tracklist):
+    """Compilations credit 'Various': find the track this video is, and use its own artist."""
+    vt = norm(video_title)
+    best = None
+    for t in tracklist:
+        tt = norm(t.get("title"))
+        if len(tt) >= 3 and tt in vt and (best is None or len(tt) > len(norm(best.get("title")))):
+            best = t
+    return artist_names(best.get("artists")) if best else None
+
+
+def display_title(artist, title):
+    """'Artist - Title', without repeating the artist when the video title already has it."""
+    if not artist or artist.lower() in ("various", "unknown artist"):
+        return title
+    if norm(title).startswith(norm(artist)):
+        return title
+    return f"{artist} - {title}"
+
+
 def get_album_videos(dig, album_id):
     data = dig.get(f"/releases/{album_id}")
     if not data:
         return None
-    artists = data.get("artists") or [{}]
-    artist = artists[0].get("name", "Unknown artist")
+    album_artist = artist_names(data.get("artists")) or "Unknown artist"
+    various = album_artist.lower().startswith("various")
+    tracklist = data.get("tracklist") or []
     thumb = data.get("thumb") or ""
-    return [
-        {"link": v.get("uri"), "thumb": thumb, "artist": artist, "title": v.get("title", "Untitled"),
-         "yt": youtube_id(v.get("uri"))}
-        for v in data.get("videos") or []
-        if v.get("embed") and v.get("uri")
-    ]
+    out = []
+    for v in data.get("videos") or []:
+        if not (v.get("embed") and v.get("uri")):
+            continue
+        title = v.get("title", "Untitled")
+        artist = track_artist_for(title, tracklist) or (None if various else album_artist)
+        out.append({"link": v.get("uri"), "thumb": thumb, "artist": artist or "",
+                    "title": title, "name": display_title(artist, title), "yt": youtube_id(v.get("uri"))})
+    return out
 
 
 def popularity(album):
@@ -226,7 +265,7 @@ def dig_song(token, song_name, artist_name):
     if song is None:
         return NO_MATCH
     if not song["labels"]:
-        return {"label_names": ["an unknown label"], "albums": [], "playlist": [], "year": song["year"]}
+        return {"label_names": ["an unknown label"], "albums": [], "playlist": [], "year": song["year"], "song": song["name"]}
 
     albums = get_top_albums(dig, song)
 
@@ -252,10 +291,10 @@ def dig_song(token, song_name, artist_name):
         for v in tracks or []:
             if v.get("yt") and v["yt"] not in seen:
                 seen.add(v["yt"])
-                playlist.append({"id": v["yt"], "title": v["title"], "artist": v["artist"],
+                playlist.append({"id": v["yt"], "name": v["name"],
                                  "album": album_title(a), "link": v["link"]})
 
-    return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist}
+    return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"]}
 
 
 @app.route("/tracks/<int:album_id>")
@@ -281,7 +320,7 @@ def home():
             return render_template("home.html")
         token = os.environ.get("DISCOGS_TOKEN")
         if not token:
-            return render_template("results.html", result=NO_TOKEN)
+            return render_template("results.html", result=NO_TOKEN, query="")
         try:
             result = dig_song(token, song_name, artist_name)
         except DiscogsError as e:
@@ -289,7 +328,7 @@ def home():
         except Exception:
             app.logger.exception("dig failed")
             result = BUSY
-        return render_template("results.html", result=result)
+        return render_template("results.html", result=result, query=" by ".join(x for x in (song_name, artist_name) if x))
 
     return render_template("home.html")
 

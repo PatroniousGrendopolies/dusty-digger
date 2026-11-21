@@ -39,6 +39,8 @@
 
     <h1>Results</h1>
 
+    {% if query %}<p>You searched for: <b>{{ query }}</b>{% if result is not string and result.song %}<br>Closest match on Discogs: <b>{{ result.song }}</b>{% if result.year %} ({{ result.year }}){% endif %}{% endif %}</p>{% endif %}
+
     {% if result is string %}
         <p>{{ result }}</p>
     {% else %}
@@ -80,7 +82,7 @@
                     <ul class="track-list">
                         {% for video in album.tracks %}
                             <li>
-                                <a href="{{ video.link }}" target="_blank" rel="noopener">{{ video.artist }} - {{ video.title }}</a>
+                                <a href="{{ video.link }}" target="_blank" rel="noopener">{{ video.name }}</a>
                                 {% if video.yt %}<a href="#" class="play-here" data-yt="{{ video.yt }}">[play here]</a>{% endif %}
                             </li>
                         {% endfor %}
@@ -114,7 +116,7 @@
                 var ol = $("queue"); ol.innerHTML = "";
                 order.forEach(function (ti, i) {
                     var t = tracks[ti], li = document.createElement("li");
-                    li.textContent = t.artist + " - " + t.title;
+                    li.textContent = t.name;
                     if (isKept(t)) { var h = document.createElement("span"); h.className = "heart"; h.textContent = " (kept)"; li.appendChild(h); }
                     if (i === pos) li.className = "current";
                     else if (skipped[t.id]) li.className = "skipped";
@@ -129,7 +131,7 @@
                 var more = pendingAlbums.length ? " still digging..." : "";
                 if (!hasTracks()) { $("now-count").textContent = pendingAlbums.length ? "(still digging...)" : ""; if (!pendingAlbums.length) $("now-title").textContent = "no playable videos found for these records."; return; }
                 var t = current();
-                $("now-title").textContent = t.artist + " - " + t.title;
+                $("now-title").textContent = t.name;
                 $("now-sub").textContent = "(from " + t.album + ")";
                 $("now-count").textContent = "[" + (pos + 1) + " of " + order.length + "]" + more;
                 var kept = isKept(t);
@@ -142,7 +144,7 @@
                 list.forEach(function (k) {
                     var li = document.createElement("li"), a = document.createElement("a");
                     a.href = k.link || ("https://www.youtube.com/watch?v=" + k.id); a.target = "_blank"; a.rel = "noopener";
-                    a.textContent = k.artist + " - " + k.title;
+                    a.textContent = k.name || ((k.artist ? k.artist + " - " : "") + k.title);
                     var rm = document.createElement("button"); rm.type = "button"; rm.textContent = "remove";
                     rm.onclick = function () { saveKeepers(keepers().filter(function (x) { return x.id !== k.id; })); renderAll(); };
                     li.appendChild(a); li.appendChild(document.createTextNode(" ")); li.appendChild(rm);
@@ -180,7 +182,7 @@
                 if (!hasTracks()) return;
                 var t = current(), list = keepers();
                 if (isKept(t)) list = list.filter(function (k) { return k.id !== t.id; });
-                else list.push({ id: t.id, title: t.title, artist: t.artist, album: t.album, link: t.link });
+                else list.push({ id: t.id, name: t.name, album: t.album, link: t.link });
                 saveKeepers(list); renderAll();
             }
 
@@ -228,14 +230,14 @@
                 list.forEach(function (v) {
                     if (ul) {
                         var item = document.createElement("li"), a = document.createElement("a");
-                        a.href = v.link; a.target = "_blank"; a.rel = "noopener"; a.textContent = v.artist + " - " + v.title;
+                        a.href = v.link; a.target = "_blank"; a.rel = "noopener"; a.textContent = v.name;
                         item.appendChild(a);
                         if (v.yt) { var b = document.createElement("a"); b.href = "#"; b.className = "play-here"; b.setAttribute("data-yt", v.yt); b.textContent = "[play here]"; item.appendChild(document.createTextNode(" ")); item.appendChild(b); }
                         ul.appendChild(item);
                     }
                     if (v.yt && !seenIds[v.yt]) {
                         seenIds[v.yt] = true;
-                        tracks.push({ id: v.yt, title: v.title, artist: v.artist, album: title, link: v.link });
+                        tracks.push({ id: v.yt, name: v.name, album: title, link: v.link });
                         order.push(tracks.length - 1);
                     }
                 });
