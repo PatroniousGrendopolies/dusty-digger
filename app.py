@@ -210,16 +210,49 @@ def label_search(dig, label_name):
     return found
 
 
-def label_catalogue(dig, label_id):
-    """Exactly this label's releases (by id), oldest first. No genres in here."""
-    out = []
-    for page in range(1, LABEL_PAGES + 1):
-        data = dig.get(f"/labels/{label_id}/releases", per_page=100, page=page, sort="year", sort_order="asc")
+def _year(r):
+    y = str(r.get("year") or "")
+    return int(y) if y.isdigit() else 0
+
+
+def label_catalogue(dig, label_id, start=None, end=None, max_pages=4):
+    """Exactly this label's releases (by id). Sorted by year, so jump to the pages that
+    cover start..end instead of reading from 1956 onwards. No genres in here."""
+    def page(n):
+        return dig.get(f"/labels/{label_id}/releases", per_page=100, page=n, sort="year", sort_order="asc")
+
+    first = page(1)
+    if not first:
+        return []
+    pages = (first.get("pagination") or {}).get("pages") or 1
+    if not start:
+        return first.get("releases") or []
+
+    def last_year(data):
+        rs = data.get("releases") or []
+        return _year(rs[-1]) if rs else 0
+
+    # Binary search for the first page whose last release reaches the start year.
+    lo, hi, cache = 1, pages, {1: first}
+    while lo < hi:
+        mid = (lo + hi) // 2
+        cache[mid] = cache.get(mid) or page(mid)
+        if not cache[mid]:
+            break
+        if last_year(cache[mid]) < start:
+            lo = mid + 1
+        else:
+            hi = mid
+    out, n = [], lo
+    while n <= pages and len([1 for _ in out]) < max_pages * 100:
+        data = cache.get(n) or page(n)
         if not data:
             break
-        out += data.get("releases") or []
-        if page >= ((data.get("pagination") or {}).get("pages") or 1):
+        rs = data.get("releases") or []
+        out += [r for r in rs if start <= _year(r) <= (end or 9999)]
+        if not rs or _year(rs[-1]) > (end or 9999) or n - lo + 1 >= max_pages:
             break
+        n += 1
     return out
 
 
@@ -246,25 +279,30 @@ def get_top_albums(dig, song, num_albums=MAX_ALBUMS):
         })
 
     refs = song.get("label_refs") or [{"name": n, "clean": n, "id": None} for n in song["labels"]]
+    start = song["year"] - ERA_YEARS if song.get("year") else None
+    end = song["year"] + ERA_YEARS if song.get("year") else None
     for ref in refs:
         searched = label_search(dig, ref["clean"])
-        catalogue = label_catalogue(dig, ref["id"]) if ref.get("id") else []
-        if catalogue:
-            # The label's own list decides what's on it; the search adds genres where it has them.
-            # When the search knows this label well, skip what it can't vouch for (genre unknown);
-            # for small labels it barely knows, trust the label's list on era alone.
-            known = sum(1 for r in catalogue if r.get("id") in searched)
-            trust_unknown = known < 5
-            for r in catalogue:
-                info = searched.get(r.get("id"))
-                if info:
-                    add(info)
-                elif trust_unknown:
-                    title = " - ".join(x for x in (r.get("artist"), r.get("title")) if x)
-                    add({"id": r.get("id"), "title": title, "year": r.get("year")}, check_genre=False)
-        else:
+        catalogue = label_catalogue(dig, ref["id"], start, end) if ref.get("id") else []
+        if not catalogue:
             for r in searched.values():
                 add(r)
+            continue
+        # The label's own list decides what's on it; the search adds genres where it has them.
+        # If the search knows most of this era's releases, skip the ones it can't vouch for
+        # (genre unknown); if it barely knows them (small label), go on era alone.
+        known = sum(1 for r in catalogue if r.get("id") in searched)
+        trust_unknown = known < 0.3 * len(catalogue)
+        for r in catalogue:
+            info = searched.get(r.get("id"))
+            if info:
+                add(info)
+            elif trust_unknown:
+                stats = ((r.get("stats") or {}).get("community") or {})
+                title = " - ".join(x for x in (re.sub(r"\s*\(\d+\)$", "", (r.get("artist") or "")).rstrip("*"), r.get("title")) if x)
+                add({"id": r.get("id"), "title": title, "year": r.get("year"),
+                     "community": {"want": stats.get("in_wantlist", 0), "have": stats.get("in_collection", 0)}},
+                    check_genre=False)
     albums.sort(key=lambda a: a["want"] + a["have"], reverse=True)
     return albums[:num_albums]
 
@@ -454,20 +492,20 @@ if __name__ == "__main__":
 
 
 
+
 @app.route("/_labelcheck")
 def _labelcheck():  # temporary diagnostics
     dig = Digger(os.environ.get("DISCOGS_TOKEN"))
     song = search_song(dig, request.args.get("s", ""), request.args.get("a", ""))
-    out = {"song": {k: song.get(k) for k in ("id", "name", "year", "genres", "styles", "labels", "label_refs")}, "labels": []}
+    out = {"song": {k: song.get(k) for k in ("name", "year", "genres", "styles", "label_refs")}, "labels": []}
+    start, end = song["year"] - ERA_YEARS, song["year"] + ERA_YEARS
     for ref in song["label_refs"]:
         searched = label_search(dig, ref["clean"])
-        cat = label_catalogue(dig, ref["id"]) if ref.get("id") else []
-        raw = dig.get(f"/labels/{ref['id']}/releases", per_page=5, page=1, sort="year", sort_order="asc") if ref.get("id") else None
-        out["labels"].append({"ref": ref, "searched": len(searched), "catalogue": len(cat),
-                              "overlap": sum(1 for r in cat if r.get("id") in searched),
-                              "cat_years": sorted({str(r.get("year")) for r in cat})[:30],
-                              "raw_keys": list((raw or {}).keys()), "raw_first": (raw or {}).get("releases", [])[:2],
-                              "remaining": dig.remaining})
-    out["albums"] = len(get_top_albums(dig, song))
+        cat = label_catalogue(dig, ref["id"], start, end)
+        out["labels"].append({"name": ref["clean"], "searched": len(searched), "catalogue_in_era": len(cat),
+                              "known": sum(1 for r in cat if r.get("id") in searched)})
+    albums = get_top_albums(dig, song)
+    out["albums"] = [a["title"] + " (" + str(a["year"]) + ")" for a in albums[:12]]
+    out["n_albums"] = len(albums)
     out["remaining_end"] = dig.remaining
     return jsonify(out)
