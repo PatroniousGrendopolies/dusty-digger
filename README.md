@@ -19,3 +19,6 @@ python app.py
 ```
 
 Then open http://localhost:5008.
+
+
+**Two ways to dig:** *by label* (the record label that first released the song, same era and style, via Discogs) or *by uploader* (everything else posted by the YouTube channel that uploaded the song, usually a crate-digging collector, ranked by genre, year and artist, with genre checkboxes). The uploader mode reads YouTube's public web pages, so it needs no API key.

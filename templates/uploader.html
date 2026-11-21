@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>My Flask App</title>
+
+    <style>
+        .current { font-weight: bold; }
+        .skipped { text-decoration: line-through; color: gray; }
+        .queue li { cursor: pointer; margin-bottom: 3px; }
+        .compact #yt, .compact iframe { display: none; }
+        .tag { color: gray; font-size: small; }
+    </style>
+</head>
+
+<body>
+
+    <h1>Results</h1>
+
+    {% if query %}<p>You searched for: <b>{{ query }}</b>{% if result is not string and result.song %}<br>Closest match on Discogs: <b>{{ result.song }}</b>{% if result.year %} ({{ result.year }}){% endif %}{% endif %}</p>{% endif %}
+
+    {% if result is string %}
+        <p>{{ result }}</p>
+    {% else %}
+        <p>We found the song on YouTube: <a href="{{ result.original.link }}" target="_blank" rel="noopener">{{ result.original.name }}</a>,
+            posted by <a href="{{ result.channel_url }}" target="_blank" rel="noopener"><b>{{ result.channel }}</b></a>.
+            Here's everything else they posted, most relevant first{% if result.target.genres %} (same genre: {{ ", ".join(result.target.genres) }}{% if result.target.year %}, close to {{ result.target.year }}{% endif %}){% endif %}.</p>
+
+        <div id="player">
+            <hr>
+            <b>Player</b><br>
+            <div id="yt"></div>
+            <p>Now playing: <span id="now-title">loading...</span> <span id="now-sub"></span> <span id="now-count"></span></p>
+            <button type="button" id="btn-prev">&lt;&lt; back</button>
+            <button type="button" id="btn-play">play/pause</button>
+            <button type="button" id="btn-next">skip &gt;&gt;</button>
+            <button type="button" id="btn-keep">keep</button>
+            <button type="button" id="btn-shuffle">shuffle</button>
+            <button type="button" id="btn-size">hide video</button>
+            <p><small>keys: right arrow or N = skip, left arrow = back, K = keep, space = play/pause. songs that won't play get skipped.</small></p>
+
+            <details id="genre-box">
+                <summary>genres: <span id="genre-summary">all</span></summary>
+                <p><small>untick the ones you don't want. new genres show up here as more of the channel loads.</small><br>
+                    <button type="button" id="genre-all">all</button>
+                    <button type="button" id="genre-none">none</button>
+                    <button type="button" id="genre-same">same as the original</button></p>
+                <div id="genre-list"></div>
+            </details>
+
+            <p id="dig-status"><small></small></p>
+            <div class="queue"><ol id="queue"></ol></div>
+            <p><b>Keepers:</b></p>
+            <ul id="keepers"></ul>
+            <p id="keepers-empty"><small>none yet. hit keep on the good ones. saved in your browser.</small></p>
+            <hr>
+        </div>
+
+        <script>
+        (function () {
+            var tracks = [];                 // every upload seen, in channel order
+            var byId = {};
+            var history = [];                // indexes already reached, in play order
+            var order = [];                  // history + the ranked, filtered rest
+            var pos = 0, player = null, ready = false, failures = 0, apiReady = false;
+            var skipped = {}, broken = {}, dir = 1, ended = false, shuffled = false;
+            var target = {{ result.target|tojson }};
+            var nextToken = {{ result.next|tojson }};
+            var loading = !!nextToken, pagesLoaded = 0, MAX_PAGES = 60;
+            var off = {};                    // genres the user unticked
+            var KEY = "dustyDiggerKeepers";
+            var UNTAGGED = "untagged";
+
+            function $(id) { return document.getElementById(id); }
+            function keepers() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
+            function saveKeepers(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
+            function isKept(t) { return keepers().some(function (k) { return k.id === t.id; }); }
+            function current() { return tracks[order[pos]]; }
+            function hasTracks() { return order.length > 0; }
+            function genresOf(t) { return t.genres && t.genres.length ? t.genres : [UNTAGGED]; }
+            function allowed(t) { return t.original || genresOf(t).some(function (g) { return !off[g]; }); }
+
+            function tagText(t) {
+                var bits = [];
+                if (t.original) bits.push("the original");
+                if (t.genres && t.genres.length) bits.push(t.genres.join(", ").toLowerCase());
+                if (t.year) bits.push(t.year);
+                return bits.length ? " [" + bits.join(", ") + "]" : "";
+            }
+
+            // Keep what's been played where it is; rank everything after the current track.
+            function rebuild() {
+                var cur = hasTracks() ? order[pos] : null;
+                var head = order.slice(0, pos + (cur === null ? 0 : 1));
+                var inHead = {}; head.forEach(function (i) { inHead[i] = true; });
+                var rest = [];
+                tracks.forEach(function (t, i) { if (!inHead[i] && allowed(t)) rest.push(i); });
+                if (!shuffled) rest.sort(function (a, b) { return (tracks[b].score - tracks[a].score) || (a - b); });
+                else {
+                    var oldRest = order.slice(pos + 1).filter(function (i) { return rest.indexOf(i) >= 0; });
+                    var added = rest.filter(function (i) { return oldRest.indexOf(i) < 0; });
+                    rest = oldRest.concat(added);
+                }
+                order = head.concat(rest);
+                if (cur === null) pos = 0;
+            }
+
+            function renderGenres() {
+                var counts = {};
+                tracks.forEach(function (t) { genresOf(t).forEach(function (g) { counts[g] = (counts[g] || 0) + 1; }); });
+                var names = Object.keys(counts).sort(function (a, b) {
+                    if (a === UNTAGGED) return 1; if (b === UNTAGGED) return -1;
+                    return counts[b] - counts[a];
+                });
+                var box = $("genre-list"); box.innerHTML = "";
+                names.forEach(function (g) {
+                    var label = document.createElement("label"), cb = document.createElement("input");
+                    cb.type = "checkbox"; cb.checked = !off[g];
+                    cb.onchange = function () { if (cb.checked) delete off[g]; else off[g] = true; rebuild(); renderAll(); };
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(" " + g.toLowerCase() + " (" + counts[g] + ")" + (target.genres.indexOf(g) >= 0 ? " <- same as the original" : "")));
+                    box.appendChild(label); box.appendChild(document.createElement("br"));
+                });
+                var offCount = names.filter(function (g) { return off[g]; }).length;
+                $("genre-summary").textContent = offCount ? (names.length - offCount) + " of " + names.length + " ticked" : "all";
+            }
+
+            function renderQueue() {
+                var ol = $("queue"); ol.innerHTML = "";
+                order.forEach(function (ti, i) {
+                    var t = tracks[ti], li = document.createElement("li");
+                    li.appendChild(document.createTextNode(t.name));
+                    var tag = document.createElement("span"); tag.className = "tag"; tag.textContent = tagText(t); li.appendChild(tag);
+                    if (isKept(t)) li.appendChild(document.createTextNode(" (kept)"));
+                    if (i === pos) li.className = "current";
+                    else if (skipped[t.id]) li.className = "skipped";
+                    li.onclick = function () { go(i); };
+                    ol.appendChild(li);
+                });
+                var cur = ol.children[pos];
+                if (cur && cur.scrollIntoView && document.activeElement === document.body) cur.scrollIntoView({ block: "nearest" });
+            }
+
+            function renderStatus() {
+                var shown = order.length, all = tracks.length;
+                $("dig-status").firstChild.textContent = loading
+                    ? "still digging through the channel... " + all + " uploads so far."
+                    : all + " uploads on this channel" + (shown < all ? ", " + shown + " with the genres you ticked." : ".");
+            }
+
+            function renderNow() {
+                var more = loading ? " still digging..." : "";
+                if (!hasTracks()) { $("now-count").textContent = ""; $("now-title").textContent = loading ? "digging..." : "nothing left with the genres you ticked."; $("now-sub").textContent = ""; return; }
+                var t = current();
+                $("now-title").textContent = t.name;
+                $("now-sub").textContent = tagText(t);
+                $("now-count").textContent = "[" + (pos + 1) + " of " + order.length + "]" + more;
+                $("btn-keep").textContent = isKept(t) ? "un-keep" : "keep";
+            }
+
+            function renderKeepers() {
+                var list = keepers(), ul = $("keepers"); ul.innerHTML = "";
+                $("keepers-empty").style.display = list.length ? "none" : "";
+                list.forEach(function (k) {
+                    var li = document.createElement("li"), a = document.createElement("a");
+                    a.href = k.link || ("https://www.youtube.com/watch?v=" + k.id); a.target = "_blank"; a.rel = "noopener";
+                    a.textContent = k.name || ((k.artist ? k.artist + " - " : "") + k.title);
+                    var rm = document.createElement("button"); rm.type = "button"; rm.textContent = "remove";
+                    rm.onclick = function () { saveKeepers(keepers().filter(function (x) { return x.id !== k.id; })); renderAll(); };
+                    li.appendChild(a); li.appendChild(document.createTextNode(" ")); li.appendChild(rm);
+                    ul.appendChild(li);
+                });
+            }
+
+            function renderAll() { renderNow(); renderQueue(); renderKeepers(); renderGenres(); renderStatus(); }
+
+            function go(i) {
+                if (i < 0 || i >= order.length) return;
+                ended = false;
+                dir = i >= pos ? 1 : -1;
+                pos = i;
+                renderAll();
+                if (ready) player.loadVideoById(current().id);
+            }
+
+            function step(from, d) {
+                for (var i = from + d; i >= 0 && i < order.length; i += d) if (!broken[tracks[order[i]].id]) return i;
+                return -1;
+            }
+            function back() { var i = step(pos, -1); if (i >= 0) go(i); }
+
+            function next(markSkipped) {
+                if (markSkipped && hasTracks()) skipped[current().id] = true;
+                var i = step(pos, 1);
+                if (i >= 0) go(i);
+                else if (loading) { ended = true; $("now-title").textContent = "still digging, next song starts when it shows up..."; $("now-sub").textContent = ""; }
+                else { $("now-title").textContent = "end of the list."; $("now-sub").textContent = ""; }
+            }
+
+            function toggleKeep() {
+                if (!hasTracks()) return;
+                var t = current(), list = keepers();
+                if (isKept(t)) list = list.filter(function (k) { return k.id !== t.id; });
+                else list.push({ id: t.id, name: t.name, link: t.link });
+                saveKeepers(list); renderAll();
+            }
+
+            function shuffle() {
+                shuffled = true;
+                var rest = order.slice(pos + 1);
+                for (var i = rest.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var x = rest[i]; rest[i] = rest[j]; rest[j] = x; }
+                order = order.slice(0, pos + 1).concat(rest);
+                renderAll();
+            }
+
+            function addUploads(list) {
+                var wasEmpty = !hasTracks();
+                list.forEach(function (u) {
+                    if (byId[u.id] !== undefined) return;
+                    byId[u.id] = tracks.length;
+                    tracks.push(u);
+                });
+                rebuild();
+                if (wasEmpty && hasTracks()) { pos = 0; startPlayer(); }
+                else if (ended && pos < order.length - 1) next(false);
+                renderAll();
+            }
+
+            function loadMore() {
+                if (!nextToken || pagesLoaded >= MAX_PAGES) { loading = false; renderAll(); return; }
+                var tries = 0;
+                var url = "/uploads?token=" + encodeURIComponent(nextToken) +
+                    "&genres=" + encodeURIComponent(target.genres.join("|")) +
+                    "&year=" + (target.year || "") + "&artist=" + encodeURIComponent(target.artist || "");
+                (function attempt() {
+                    fetch(url).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+                    .then(function (res) {
+                        if (res.ok) { pagesLoaded++; nextToken = res.j.next; addUploads(res.j.uploads || []); setTimeout(loadMore, 300); }
+                        else if (++tries < 4) setTimeout(attempt, 3000);
+                        else { loading = false; renderAll(); }
+                    })
+                    .catch(function () { if (++tries < 4) setTimeout(attempt, 3000); else { loading = false; renderAll(); } });
+                })();
+            }
+
+            $("btn-next").onclick = function () { next(true); };
+            $("btn-prev").onclick = back;
+            $("btn-keep").onclick = toggleKeep;
+            $("btn-shuffle").onclick = shuffle;
+            $("btn-play").onclick = function () {
+                if (!ready) return;
+                if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+            };
+            $("btn-size").onclick = function () {
+                var p = $("player"); p.classList.toggle("compact");
+                this.textContent = p.classList.contains("compact") ? "show video" : "hide video";
+            };
+            function setAll(fn) {
+                tracks.forEach(function (t) { genresOf(t).forEach(function (g) { if (fn(g)) delete off[g]; else off[g] = true; }); });
+                rebuild(); renderAll();
+            }
+            $("genre-all").onclick = function () { setAll(function () { return true; }); };
+            $("genre-none").onclick = function () { setAll(function () { return false; }); };
+            $("genre-same").onclick = function () { setAll(function (g) { return target.genres.indexOf(g) >= 0; }); };
+            document.addEventListener("keydown", function (e) {
+                if (/input|textarea/i.test((e.target.tagName || ""))) return;
+                if (e.key === "ArrowRight" || e.key === "n" || e.key === "N") { next(true); e.preventDefault(); }
+                else if (e.key === "ArrowLeft") { back(); e.preventDefault(); }
+                else if (e.key === "k" || e.key === "K") { toggleKeep(); }
+                else if (e.key === " " && ready) {
+                    e.preventDefault();
+                    if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+                }
+            });
+
+            function startPlayer() {
+                if (!apiReady || player || !hasTracks()) return;
+                player = new YT.Player("yt", {
+                    width: 480, height: 270,
+                    videoId: current().id,
+                    playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+                    events: {
+                        onReady: function () { ready = true; },
+                        onStateChange: function (e) {
+                            if (e.data === YT.PlayerState.PLAYING) failures = 0;
+                            else if (e.data === YT.PlayerState.ENDED) next(false);
+                        },
+                        onError: function () {
+                            broken[current().id] = skipped[current().id] = true;
+                            if (++failures >= 15) return;
+                            var i = step(pos, dir);
+                            if (i < 0) i = step(pos, -dir);
+                            if (i >= 0) { var keepDir = dir; go(i); dir = keepDir; }
+                        }
+                    }
+                });
+            }
+
+            addUploads({{ result.uploads|tojson }});
+            setTimeout(loadMore, 800);
+            window.onYouTubeIframeAPIReady = function () { apiReady = true; startPlayer(); };
+            var s = document.createElement("script");
+            s.src = "https://www.youtube.com/iframe_api";
+            document.head.appendChild(s);
+        })();
+        </script>
+    {% endif %}
+
+    <a href="/">Keep on digging 👷 </a>
+
+</body>
+
+</html>

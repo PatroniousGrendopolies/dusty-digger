@@ -6,6 +6,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from flask import Flask, jsonify, render_template, request
 
+import uploader
+
 app = Flask(__name__)
 
 API = "https://api.discogs.com"
@@ -108,6 +110,8 @@ def search_song(dig, song_name, artist_name):
         "genres": release.get("genres") or first.get("genre") or [],
         "styles": release.get("styles") or first.get("style") or [],
         "labels": label_names(release),
+        "videos": [{"yt": youtube_id(v.get("uri")), "title": v.get("title") or ""}
+                   for v in release.get("videos") or [] if youtube_id(v.get("uri"))],
     }
 
 
@@ -319,6 +323,30 @@ def dig_song(token, song_name, artist_name):
     return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"]}
 
 
+def dig_by_uploader(token, song_name, artist_name):
+    song = None
+    if token:
+        try:
+            song = search_song(Digger(token), song_name, artist_name)
+        except DiscogsError:
+            song = None  # Discogs only helps rank; YouTube can still do the digging
+    return uploader.dig_uploader(song, song_name, artist_name)
+
+
+@app.route("/uploads")
+def uploads():
+    """Next page of the uploader's channel, tagged and scored, for the page to append."""
+    token = request.args.get("token") or ""
+    year = request.args.get("year", "")
+    target = {"genres": [g for g in request.args.get("genres", "").split("|") if g],
+              "year": int(year) if year.isdigit() else None,
+              "artist": request.args.get("artist", "")}
+    items, nxt = uploader.dig_uploads_page(token, target)
+    if items is None:
+        return jsonify({"retry": 3}), 503
+    return jsonify({"uploads": items, "next": nxt})
+
+
 @app.route("/tracks/<int:album_id>")
 def tracks(album_id):
     """One album's playable tracks, fetched by the page after it loads."""
@@ -341,6 +369,14 @@ def home():
         if not song_name and not artist_name:
             return render_template("home.html")
         token = os.environ.get("DISCOGS_TOKEN")
+        query = " by ".join(x for x in (song_name, artist_name) if x)
+        if request.form.get("mode") == "uploader":
+            try:
+                result = dig_by_uploader(token, song_name, artist_name)
+            except Exception:
+                app.logger.exception("uploader dig failed")
+                result = "YouTube didn't answer. Give it a minute and dig again."
+            return render_template("uploader.html", result=result, query=query)
         if not token:
             return render_template("results.html", result=NO_TOKEN, query="")
         try:
