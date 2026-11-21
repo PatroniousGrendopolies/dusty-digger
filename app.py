@@ -504,6 +504,11 @@ def _labelcheck():  # temporary diagnostics
         cat = label_catalogue(dig, ref["id"], start, end)
         out["labels"].append({"name": ref["clean"], "searched": len(searched), "catalogue_in_era": len(cat),
                               "known": sum(1 for r in cat if r.get("id") in searched)})
+    ref = song["label_refs"][0]
+    sr = label_search(dig, ref["clean"]); ct = label_catalogue(dig, ref["id"], start, end)
+    out["sample_search"] = [(k, type(k).__name__, v.get("year"), v.get("title")) for k, v in list(sr.items())[:4]]
+    out["sample_cat"] = [(r.get("id"), type(r.get("id")).__name__, r.get("year"), r.get("title"), r.get("type")) for r in ct[:4]]
+    out["search_years"] = sorted({str(v.get("year")) for v in sr.values()})
     albums = get_top_albums(dig, song)
     out["albums"] = [a["title"] + " (" + str(a["year"]) + ")" for a in albums[:12]]
     out["n_albums"] = len(albums)
