@@ -110,6 +110,7 @@ def search_song(dig, song_name, artist_name):
         "genres": release.get("genres") or first.get("genre") or [],
         "styles": release.get("styles") or first.get("style") or [],
         "labels": label_names(release),
+        "label_refs": label_list(release),
         "videos": [{"yt": youtube_id(v.get("uri")), "title": v.get("title") or ""}
                    for v in release.get("videos") or [] if youtube_id(v.get("uri"))],
     }
@@ -137,13 +138,24 @@ def pick_original(results, artist_name):
     return next(r for r in pool if year(r) == best)
 
 
-def label_names(release):
-    names = []
+def clean_label(name):
+    """Discogs numbers labels that share a name: 'Crystal Records (3)'. Searches and people want 'Crystal Records'."""
+    return re.sub(r"\s*\(\d+\)$", "", name or "").strip()
+
+
+def label_list(release):
+    labels, seen = [], set()
     for label in release.get("labels") or []:
         name = (label.get("name") or "").strip()
-        if name and name not in names and name.lower() != "not on label":
-            names.append(name)
-    return names[:MAX_LABELS]
+        if not name or name.lower() == "not on label" or name in seen:
+            continue
+        seen.add(name)
+        labels.append({"name": name, "clean": clean_label(name), "id": label.get("id")})
+    return labels[:MAX_LABELS]
+
+
+def label_names(release):
+    return [l["clean"] for l in label_list(release)]
 
 
 # Later remixes and bootleg mixes ride on a label's name but aren't its sound or era.
@@ -154,7 +166,7 @@ REMIX = re.compile(
     re.I)
 
 
-def fits(song, album):
+def fits(song, album, check_genre=True):
     """Same era, same sound. Drops e.g. 2010s house remixes from a 90s reggae label."""
     if REMIX.search(album.get("title") or ""):
         return False
@@ -163,6 +175,8 @@ def fits(song, album):
     if song["year"]:
         if year is None or abs(year - song["year"]) > ERA_YEARS:
             return False
+    if not check_genre:
+        return True  # straight from the label's own catalogue, which doesn't list genres
     genres, styles = album.get("genre") or [], album.get("style") or []
     if song["genres"] and not set(genres) & set(song["genres"]):
         return False
@@ -180,33 +194,77 @@ def fits(song, album):
     return True
 
 
+def label_search(dig, label_name):
+    """Discogs search by label name: has genres, styles and collector counts, but mixes
+    together every label that shares the name."""
+    found = {}
+    for page in range(1, LABEL_PAGES + 1):
+        data = dig.get("/database/search", label=label_name, type="release", per_page=100, page=page)
+        if not data:
+            break
+        for r in data.get("results") or []:
+            if r.get("id"):
+                found[r["id"]] = r
+        if page >= ((data.get("pagination") or {}).get("pages") or 1):
+            break
+    return found
+
+
+def label_catalogue(dig, label_id):
+    """Exactly this label's releases (by id), oldest first. No genres in here."""
+    out = []
+    for page in range(1, LABEL_PAGES + 1):
+        data = dig.get(f"/labels/{label_id}/releases", per_page=100, page=page, sort="year", sort_order="asc")
+        if not data:
+            break
+        out += data.get("releases") or []
+        if page >= ((data.get("pagination") or {}).get("pages") or 1):
+            break
+    return out
+
+
 def get_top_albums(dig, song, num_albums=MAX_ALBUMS):
     """Other releases on the original label(s), from the same era and style, most-collected first."""
     seen, albums = set(), []
-    for label_name in song["labels"]:
-        for page in range(1, LABEL_PAGES + 1):
-            data = dig.get("/database/search", label=label_name, type="release", per_page=100, page=page)
-            if not data:
-                break
-            for album in data.get("results") or []:
-                if album.get("id") == song["id"] or (song["master_id"] and album.get("master_id") == song["master_id"]):
-                    continue
-                if not fits(song, album):
-                    continue
-                key = album.get("master_id") or (album.get("title") or "").lower()
-                if key in seen:  # one entry per record, not every pressing
-                    continue
-                seen.add(key)
-                community = album.get("community") or {}
-                albums.append({
-                    "id": album.get("id"),
-                    "title": album.get("title") or "Untitled",
-                    "year": album.get("year"),
-                    "want": community.get("want", 0) or 0,
-                    "have": community.get("have", 0) or 0,
-                })
-            if page >= ((data.get("pagination") or {}).get("pages") or 1):
-                break
+
+    def add(album, check_genre=True):
+        if album.get("id") == song["id"] or (song["master_id"] and album.get("master_id") == song["master_id"]):
+            return
+        if not fits(song, album, check_genre=check_genre):
+            return
+        key = album.get("master_id") or (album.get("title") or "").lower()
+        if key in seen:  # one entry per record, not every pressing
+            return
+        seen.add(key)
+        community = album.get("community") or {}
+        albums.append({
+            "id": album.get("id"),
+            "title": album.get("title") or "Untitled",
+            "year": album.get("year"),
+            "want": community.get("want", 0) or 0,
+            "have": community.get("have", 0) or 0,
+        })
+
+    refs = song.get("label_refs") or [{"name": n, "clean": n, "id": None} for n in song["labels"]]
+    for ref in refs:
+        searched = label_search(dig, ref["clean"])
+        catalogue = label_catalogue(dig, ref["id"]) if ref.get("id") else []
+        if catalogue:
+            # The label's own list decides what's on it; the search adds genres where it has them.
+            # When the search knows this label well, skip what it can't vouch for (genre unknown);
+            # for small labels it barely knows, trust the label's list on era alone.
+            known = sum(1 for r in catalogue if r.get("id") in searched)
+            trust_unknown = known < 5
+            for r in catalogue:
+                info = searched.get(r.get("id"))
+                if info:
+                    add(info)
+                elif trust_unknown:
+                    title = " - ".join(x for x in (r.get("artist"), r.get("title")) if x)
+                    add({"id": r.get("id"), "title": title, "year": r.get("year")}, check_genre=False)
+        else:
+            for r in searched.values():
+                add(r)
     albums.sort(key=lambda a: a["want"] + a["have"], reverse=True)
     return albums[:num_albums]
 
