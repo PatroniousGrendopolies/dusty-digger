@@ -425,7 +425,8 @@ def get_album_videos(dig, album_id):
         title = v.get("title", "Untitled")
         artist = track_artist_for(title, tracklist) or (None if various else album_artist)
         out.append({"link": v.get("uri"), "thumb": thumb, "artist": artist or "",
-                    "title": title, "name": display_title(artist, title), "yt": youtube_id(v.get("uri"))})
+                    "title": title, "name": display_title(artist, title), "yt": youtube_id(v.get("uri")),
+                    "secs": v.get("duration") or None})
     return out
 
 
@@ -475,7 +476,7 @@ def dig_song(token, song_name, artist_name, release_id=None):
             if v.get("yt") and v["yt"] not in seen:
                 seen.add(v["yt"])
                 playlist.append({"id": v["yt"], "name": v["name"],
-                                 "album": album_title(a), "link": v["link"]})
+                                 "album": album_title(a), "link": v["link"], "secs": v.get("secs")})
 
     return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"],
             "disc": disc_info(song)}

@@ -75,6 +75,25 @@ def artist_of(title):
     return m.group(1).strip() if m else ""
 
 
+
+DURATION = re.compile(r"^(?:(\d+):)?(\d{1,2}):(\d{2})$")
+
+
+def duration_in(node):
+    """Seconds from the first '1:02:33' / '4:05' style badge found inside a YouTube item."""
+    stack = [node]
+    while stack:
+        x = stack.pop()
+        if isinstance(x, dict):
+            stack.extend(x.values())
+        elif isinstance(x, list):
+            stack.extend(x)
+        elif isinstance(x, str):
+            m = DURATION.match(x.strip())
+            if m:
+                return int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+    return None
+
 class YouTube:
     def __init__(self, deadline):
         self.deadline = deadline
@@ -173,13 +192,13 @@ class YouTube:
             title = ((meta.get("title") or {}).get("content")) or ""
             if vid and len(vid) == 11 and vid not in seen:
                 seen.add(vid)
-                videos.append({"id": vid, "title": title})
+                videos.append({"id": vid, "title": title, "secs": duration_in(lv.get("contentImage"))})
         for vr in walk(d, "videoRenderer"):
             vid = vr.get("videoId")
             if vid and vid not in seen:
                 seen.add(vid)
                 runs = ((vr.get("title") or {}).get("runs") or [{}])
-                videos.append({"id": vid, "title": runs[0].get("text", "")})
+                videos.append({"id": vid, "title": runs[0].get("text", ""), "secs": duration_in(vr.get("lengthText"))})
         # Several "load more" tokens come back; the video grid's is by far the longest
         # (the short ones are for side shelves and return nothing).
         toks = [(((c.get("continuationEndpoint") or {}).get("continuationCommand") or {}).get("token"))
@@ -232,7 +251,7 @@ def tag_and_score(videos, details, target):
             score += 3 if gap <= 3 else 2 if gap <= 7 else 1 if gap <= 12 else 0
         if t_artist and artist and (norm(artist) == t_artist or t_artist in norm(title)):
             score += 2
-        out.append({"id": v["id"], "name": title, "genres": genres, "year": year, "score": score,
+        out.append({"id": v["id"], "name": title, "genres": genres, "year": year, "score": score, "secs": v.get("secs"),
                     "link": f"https://www.youtube.com/watch?v={v['id']}"})
     return out
 

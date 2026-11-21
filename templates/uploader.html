@@ -41,6 +41,7 @@
             <button type="button" id="btn-size">hide video</button>
             <button type="button" id="btn-cast">cast to tv</button>
             <p id="cast-box" style="display:none"></p>
+            <p><label><input type="checkbox" id="skip-albums"> skip full albums (over 15 min)</label></p>
             <p><small>keys: right arrow or N = skip, left arrow = back, K = keep, space = play/pause. songs that won't play get skipped.</small></p>
 
             <details id="genre-box">
@@ -80,6 +81,20 @@
             function saveKeepers(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
             function isKept(t) { return keepers().some(function (k) { return k.id === t.id; }); }
             function current() { return tracks[order[pos]]; }
+            // Full albums: long uploads (over 15 min) or "full album" in the title. Skipped when the
+            // box is ticked, unless you pick one yourself.
+            var SKIP_KEY = "dustyDiggerSkipAlbums", explicitId = null;
+            function skipAlbums() { var b = $("skip-albums"); return b ? b.checked : true; }
+            function isAlbum(t) { return !!t && ((t.secs && t.secs > 900) || /full[\s-]*(album|lp|ep)\b|(album|álbum)\s+completo|complete\s+album|[\[(]\s*lp\s*[\])]/i.test(t.name || "")); }
+            function albumNote(t) { return isAlbum(t) ? " [full album" + (t.secs ? ", " + Math.round(t.secs / 60) + " min" : "") + "]" : ""; }
+            function passOver(t) { return broken[t.id] || (skipAlbums() && isAlbum(t) && t.id !== explicitId); }
+            function checkLength() {
+                var t = current();
+                if (!t || !player || !player.getDuration) return;
+                var d = player.getDuration();
+                if (d > 0 && !t.secs) { t.secs = Math.round(d); renderQueue(); }
+                if (passOver(t)) next(false);
+            }
             function hasTracks() { return order.length > 0; }
             function genresOf(t) { return t.genres && t.genres.length ? t.genres : [UNTAGGED]; }
             function allowed(t) { return t.original || genresOf(t).some(function (g) { return !off[g]; }); }
@@ -89,6 +104,7 @@
                 if (t.original) bits.push("the original");
                 if (t.genres && t.genres.length) bits.push(t.genres.join(", ").toLowerCase());
                 if (t.year) bits.push(t.year);
+                if (isAlbum(t)) bits.push("full album" + (t.secs ? ", " + Math.round(t.secs / 60) + " min" : ""));
                 return bits.length ? " [" + bits.join(", ") + "]" : "";
             }
 
@@ -138,7 +154,7 @@
                     if (isKept(t)) li.appendChild(document.createTextNode(" (kept)"));
                     if (i === pos) li.className = "current";
                     else if (skipped[t.id]) li.className = "skipped";
-                    li.onclick = function () { go(i); };
+                    li.onclick = function () { explicitId = tracks[order[i]].id; go(i); };
                     ol.appendChild(li);
                 });
                 var cur = ol.children[pos];
@@ -188,7 +204,7 @@
             }
 
             function step(from, d) {
-                for (var i = from + d; i >= 0 && i < order.length; i += d) if (!broken[tracks[order[i]].id]) return i;
+                for (var i = from + d; i >= 0 && i < order.length; i += d) if (!passOver(tracks[order[i]])) return i;
                 return -1;
             }
             function back() { var i = step(pos, -1); if (i >= 0) go(i); }
@@ -251,6 +267,13 @@
             $("btn-prev").onclick = back;
             $("btn-keep").onclick = toggleKeep;
             $("btn-shuffle").onclick = shuffle;
+            (function () {
+                var box = $("skip-albums"), saved = null;
+                try { saved = localStorage.getItem(SKIP_KEY); } catch (e) {}
+                box.checked = saved !== "0";
+                box.onchange = function () { try { localStorage.setItem(SKIP_KEY, box.checked ? "1" : "0"); } catch (e) {} renderAll(); if (box.checked && hasTracks() && passOver(current())) next(false); };
+            })();
+
             $("btn-cast").onclick = function () {
                 var ids = [];
                 for (var i = pos; i < order.length && ids.length < 50; i++) {
@@ -311,7 +334,7 @@
                     events: {
                         onReady: function () { ready = true; },
                         onStateChange: function (e) {
-                            if (e.data === YT.PlayerState.PLAYING) failures = 0;
+                            if (e.data === YT.PlayerState.PLAYING) { failures = 0; checkLength(); }
                             else if (e.data === YT.PlayerState.ENDED) next(false);
                         },
                         onError: function () {
@@ -335,7 +358,7 @@
         </script>
     {% endif %}
 
-    <a href="/">Keep on digging 👷 </a>
+    <a href="/" target="_blank">Keep on digging 👷 </a> <small>(opens a new tab, so the music here keeps going)</small>
 
 </body>
 

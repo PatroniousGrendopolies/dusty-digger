@@ -3,7 +3,7 @@
 <p>Digging on: <a href="{{ d.url }}" target="_blank" rel="noopener"><b>{{ d.name }}</b></a>
     ({% if d.label %}{{ d.label }}{% endif %}{% if d.year %}, {{ d.year }}{% endif %}{% if d.country %}, {{ d.country }}{% endif %}) <small>on Discogs</small>
 {% if d.options and d.options|length > 1 %}
-<form action="/" method="post" style="margin:0" onsubmit="this.querySelector('input[type=submit]').value='digging...'">
+<form action="/" method="post" target="_blank" style="margin:0" onsubmit="this.querySelector('input[type=submit]').value='digging...'">
     <small>wrong version? pick another pressing:</small>
     <input type="hidden" name="song_name" value="{{ form.song_name }}">
     <input type="hidden" name="artist_name" value="{{ form.artist_name }}">
