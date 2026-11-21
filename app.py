@@ -263,6 +263,8 @@ def get_top_albums(dig, song, num_albums=MAX_ALBUMS):
     def add(album, check_genre=True):
         if album.get("id") == song["id"] or (song["master_id"] and album.get("master_id") == song["master_id"]):
             return
+        if norm(album.get("title")) == norm(song.get("name")):  # another pressing of the song itself
+            return
         if not fits(song, album, check_genre=check_genre):
             return
         key = album.get("master_id") or (album.get("title") or "").lower()
@@ -492,25 +494,3 @@ if __name__ == "__main__":
 
 
 
-
-@app.route("/_labelcheck")
-def _labelcheck():  # temporary diagnostics
-    dig = Digger(os.environ.get("DISCOGS_TOKEN"))
-    song = search_song(dig, request.args.get("s", ""), request.args.get("a", ""))
-    out = {"song": {k: song.get(k) for k in ("name", "year", "genres", "styles", "label_refs")}, "labels": []}
-    start, end = song["year"] - ERA_YEARS, song["year"] + ERA_YEARS
-    for ref in song["label_refs"]:
-        searched = label_search(dig, ref["clean"])
-        cat = label_catalogue(dig, ref["id"], start, end)
-        out["labels"].append({"name": ref["clean"], "searched": len(searched), "catalogue_in_era": len(cat),
-                              "known": sum(1 for r in cat if r.get("id") in searched)})
-    ref = song["label_refs"][0]
-    sr = label_search(dig, ref["clean"]); ct = label_catalogue(dig, ref["id"], start, end)
-    out["sample_search"] = [(k, type(k).__name__, v.get("year"), v.get("title")) for k, v in list(sr.items())[:4]]
-    out["sample_cat"] = [(r.get("id"), type(r.get("id")).__name__, r.get("year"), r.get("title"), r.get("type")) for r in ct[:4]]
-    out["search_years"] = sorted({str(v.get("year")) for v in sr.values()})
-    albums = get_top_albums(dig, song)
-    out["albums"] = [a["title"] + " (" + str(a["year"]) + ")" for a in albums[:12]]
-    out["n_albums"] = len(albums)
-    out["remaining_end"] = dig.remaining
-    return jsonify(out)
