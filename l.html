@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>My Flask App</title>
+
+    <style>
+        .album-container {
+            margin-bottom: 40px;
+        }
+
+        .album-header {
+            display: flex;
+            align-items: center;
+        }
+
+        .album-header img {
+            margin-right: 20px;
+        }
+
+        .track-list {
+            margin-top: 10px;
+        }
+
+        .track-list li {
+            margin-bottom: 5px;
+        }
+
+        .current { font-weight: bold; }
+        .skipped { text-decoration: line-through; color: gray; }
+        .queue li { cursor: pointer; }
+        .compact #yt, .compact iframe { display: none; }
+    </style>
+</head>
+
+<body>
+
+    <h1>Results</h1>
+
+    <p>You searched for: <b>Natural is Jah Mystic by Doniki</b><br>Closest match on Discogs: <b>Doniki - Natural Is Jah Mystic</b> (1997)</p>
+
+    
+        <p>We've unearthed something. This song was originally put out by Kariang Records in 1997. Here's what else they released around then (1993 to 2001) in the same style:</p>
+
+        
+        <div id="player">
+            <hr>
+            <b>Player</b><br>
+            <div id="yt"></div>
+            <p>Now playing: <span id="now-title">Digging up the first track...</span> <span id="now-sub"></span> <span id="now-count"></span></p>
+            <button type="button" id="btn-prev">&lt;&lt; back</button>
+            <button type="button" id="btn-play">play/pause</button>
+            <button type="button" id="btn-next">skip &gt;&gt;</button>
+            <button type="button" id="btn-keep">keep</button>
+            <button type="button" id="btn-shuffle">shuffle</button>
+            <button type="button" id="btn-size">hide video</button>
+            <p><small>keys: right arrow or N = skip, left arrow = back, K = keep, space = play/pause. songs that won't play get skipped.</small></p>
+            <div class="queue"><ol id="queue"></ol></div>
+            <p><b>Keepers:</b></p>
+            <ul id="keepers"></ul>
+            <p id="keepers-empty"><small>none yet. hit keep on the good ones. saved in your browser.</small></p>
+            <hr>
+        </div>
+        
+
+        <div>
+            
+                <div class="album-container" data-album="3198889">
+                    <div class="album-header">
+                        
+                            <img src="https://i.discogs.com/0EFAFyBhyH52KsGmy59ZZSwrKJg-WStYPLQHVRuQtwQ/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTMxOTg4/ODktMTY5NDI1OTA2/Mi04NjY1LmpwZWc.jpeg" alt="Album thumbnail">
+                        
+                        <div>
+                            <h3>Mystic Revealers - Rastaman In New York (1993)</h3>
+                            <p>Rating: 421 want it · 138 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=D2elxsn34_4" target="_blank" rel="noopener">Mystic Revealers ‎– Rastaman In New York + Version ( Kariang Records 7&#34;, 1993)</a>
+                                <a href="#" class="play-here" data-yt="D2elxsn34_4">[play here]</a>
+                            </li>
+                        
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3769083">
+                    <div class="album-header">
+                        
+                            <img src="https://i.discogs.com/EoyANld5vvZ5dcYnAt_M_XwQ0BehBVBITSAS9Ajnb78/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTM3Njkw/ODMtMTM0MzY1OTM3/OS04MDYwLmpwZWc.jpeg" alt="Album thumbnail">
+                        
+                        <div>
+                            <h3>Sizzla - Get We Out (1999)</h3>
+                            <p>Rating: 62 want it · 134 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=tvbEX-VLAnk" target="_blank" rel="noopener">Sizzla - Get We Out w/ Version - Kariang 7&#34; 1999</a>
+                                <a href="#" class="play-here" data-yt="tvbEX-VLAnk">[play here]</a>
+                            </li>
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=zWuBfacTrEU" target="_blank" rel="noopener">Sizzla - Get We Out (Kariang Records) 1999</a>
+                                <a href="#" class="play-here" data-yt="zWuBfacTrEU">[play here]</a>
+                            </li>
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=jFW_5182ce0" target="_blank" rel="noopener">Sizzla - Get We Out- Original Video By KnowledgeIsKey215</a>
+                                <a href="#" class="play-here" data-yt="jFW_5182ce0">[play here]</a>
+                            </li>
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=N2eKGKl76_g" target="_blank" rel="noopener">Sizzla - Get We Out</a>
+                                <a href="#" class="play-here" data-yt="N2eKGKl76_g">[play here]</a>
+                            </li>
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=TOHjWeiPN50" target="_blank" rel="noopener">Sizzla - Get We Out - Sizzla</a>
+                                <a href="#" class="play-here" data-yt="TOHjWeiPN50">[play here]</a>
+                            </li>
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=2rRsTL030AA" target="_blank" rel="noopener">Sizzla - Get We Out</a>
+                                <a href="#" class="play-here" data-yt="2rRsTL030AA">[play here]</a>
+                            </li>
+                        
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="1419205">
+                    <div class="album-header">
+                        
+                            <img src="https://i.discogs.com/ut37hiE79U1c3XkCsTOF_wSxFLs3uG9Q9ImkyPzboPs/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE0MTky/MDUtMTIxODExOTc2/OS5qcGVn.jpeg" alt="Album thumbnail">
+                        
+                        <div>
+                            <h3>Sizzla - Liberate Yourself (LP One) (2000)</h3>
+                            <p>Rating: 54 want it · 133 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                            <li>
+                                <a href="https://www.youtube.com/watch?v=rLBSAy0tDUU" target="_blank" rel="noopener">Sizzla - Liberate Yourself</a>
+                                <a href="#" class="play-here" data-yt="rLBSAy0tDUU">[play here]</a>
+                            </li>
+                        
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3522905">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Prezident Brown - Micro-Chip (1999)</h3>
+                            <p>Rating: 97 want it · 85 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="3522905">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3584938">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Doniki &amp; Steady* - Bad Fruit (1995)</h3>
+                            <p>Rating: 128 want it · 49 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="3584938">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3089332">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Sizzla - Healing Of The Nation (1997)</h3>
+                            <p>Rating: 42 want it · 133 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="3089332">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3584936">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Mystic Revealers - Bun Dem (1996)</h3>
+                            <p>Rating: 150 want it · 23 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="3584936">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="6582324">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Mystic Revealers - January To December (1994)</h3>
+                            <p>Rating: 135 want it · 27 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="6582324">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="4667681">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Bushman (3) - Somewhere (1999)</h3>
+                            <p>Rating: 55 want it · 106 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="4667681">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="5958267">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Daweh Congo - Rocky Foundation (1997)</h3>
+                            <p>Rating: 106 want it · 37 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="5958267">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="1422540">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Garnet Silk* - Wrong Is Wrong (1995)</h3>
+                            <p>Rating: 36 want it · 102 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="1422540">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="1791621">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Sizzla - And Bredren - Liberate Yourself (LP Two) (2000)</h3>
+                            <p>Rating: 47 want it · 91 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="1791621">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="4023777">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Jah Mason - Dem Have An&#39;dem Want (1997)</h3>
+                            <p>Rating: 47 want it · 89 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="4023777">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="2923041">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Doniki - Jah Live Forever (1997)</h3>
+                            <p>Rating: 59 want it · 70 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="2923041">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="4667687">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Terry Ganzie - Can&#39;t Dictate (1999)</h3>
+                            <p>Rating: 61 want it · 65 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="4667687">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="6011484">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Kulcha Knox - Who Jah Send (1999)</h3>
+                            <p>Rating: 54 want it · 70 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="6011484">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="2798602">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Kulcha Knox - Ma Ma Warrior (1997)</h3>
+                            <p>Rating: 33 want it · 89 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="2798602">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="5494700">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Chachi (3) / B. Mystic* / Doniki &amp; Steady*, Iquylah* - Warning (1997)</h3>
+                            <p>Rating: 72 want it · 41 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="5494700">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="5759180">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Sizzla - Takes Only Time (1997)</h3>
+                            <p>Rating: 20 want it · 84 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="5759180">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="1422530">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Mystic Revealers &amp; Sizzla - Tell Them (1996)</h3>
+                            <p>Rating: 51 want it · 37 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="1422530">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="2934352">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Ernie Ranglin* - Natty Dread (1995)</h3>
+                            <p>Rating: 53 want it · 34 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="2934352">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3438036">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Prezident Brown - Mystery Babylon (1995)</h3>
+                            <p>Rating: 48 want it · 37 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="3438036">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3742849">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Sizzla And Bredren (2) - Liberate Yourself  (2000)</h3>
+                            <p>Rating: 9 want it · 76 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="3742849">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="14208019">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Sizzla - From Long Time (1997)</h3>
+                            <p>Rating: 23 want it · 59 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="14208019">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="15209557">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Garnet Silk* - Sayonara (1997)</h3>
+                            <p>Rating: 28 want it · 46 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="15209557">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="3540294">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Sister Carol - Always Be A Ras (1995)</h3>
+                            <p>Rating: 42 want it · 29 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="3540294">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="4867539">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Mystic Revealers - Space And Dub (1996)</h3>
+                            <p>Rating: 24 want it · 47 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="4867539">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="6397988">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Doniki &amp; Steady* - Hills &amp; Valley (1995)</h3>
+                            <p>Rating: 29 want it · 26 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="6397988">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="2800409">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>President Brown* - Word Of Encouragement (1997)</h3>
+                            <p>Rating: 8 want it · 43 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="2800409">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="2923033">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Prezident Brown - Rough Road (1995)</h3>
+                            <p>Rating: 26 want it · 23 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="2923033">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="2834809">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Mystic Revealers / Anthony B - I&#39;m Gonna Tell You (1997)</h3>
+                            <p>Rating: 7 want it · 40 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="2834809">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="7626785">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Kulcha Knox - Dread Natty (1995)</h3>
+                            <p>Rating: 17 want it · 28 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="7626785">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="2455056">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Brian &amp; Tony Gold - I Can&#39;t Stand The Rain (1997)</h3>
+                            <p>Rating: 10 want it · 33 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="2455056">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="4158503">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>General T.K. - KKK (1995)</h3>
+                            <p>Rating: 27 want it · 15 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="4158503">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="5325997">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Sizzla - By Your Words (1997)</h3>
+                            <p>Rating: 2 want it · 40 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="5325997">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="7012751">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Prezident Brown - Faith / In This Life (1998)</h3>
+                            <p>Rating: 5 want it · 34 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="7012751">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="5932337">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Chezidek - Congregation (1997)</h3>
+                            <p>Rating: 7 want it · 30 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="5932337">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="7710645">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Mystic Revealers, Rapper Robert* - When I Am Far Away (1995)</h3>
+                            <p>Rating: 23 want it · 13 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="7710645">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="6818559">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Jack Radics - Pull Your Kotch (1995)</h3>
+                            <p>Rating: 6 want it · 30 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="6818559">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+                <div class="album-container" data-album="8956869">
+                    <div class="album-header">
+                        
+                        <div>
+                            <h3>Ernie Ranglin* - Tribute To A Legend (1997)</h3>
+                            <p>Rating: 9 want it · 26 have it</p>
+                        </div>
+                    </div>
+                    <ul class="track-list">
+                        
+                        <li class="pending" data-pending="8956869">digging up tracks...</li>
+                        
+                    </ul>
+                </div>
+            
+        </div>
+
+        
+        <script>
+        (function () {
+            var tracks = [{"album": "Mystic Revealers - Rastaman In New York (1993)", "id": "D2elxsn34_4", "link": "https://www.youtube.com/watch?v=D2elxsn34_4", "name": "Mystic Revealers \u200e\u2013 Rastaman In New York + Version ( Kariang Records 7\", 1993)"}, {"album": "Sizzla - Get We Out (1999)", "id": "tvbEX-VLAnk", "link": "https://www.youtube.com/watch?v=tvbEX-VLAnk", "name": "Sizzla - Get We Out w/ Version - Kariang 7\" 1999"}, {"album": "Sizzla - Get We Out (1999)", "id": "zWuBfacTrEU", "link": "https://www.youtube.com/watch?v=zWuBfacTrEU", "name": "Sizzla - Get We Out (Kariang Records) 1999"}, {"album": "Sizzla - Get We Out (1999)", "id": "jFW_5182ce0", "link": "https://www.youtube.com/watch?v=jFW_5182ce0", "name": "Sizzla - Get We Out- Original Video By KnowledgeIsKey215"}, {"album": "Sizzla - Get We Out (1999)", "id": "N2eKGKl76_g", "link": "https://www.youtube.com/watch?v=N2eKGKl76_g", "name": "Sizzla - Get We Out"}, {"album": "Sizzla - Get We Out (1999)", "id": "TOHjWeiPN50", "link": "https://www.youtube.com/watch?v=TOHjWeiPN50", "name": "Sizzla - Get We Out - Sizzla"}, {"album": "Sizzla - Get We Out (1999)", "id": "2rRsTL030AA", "link": "https://www.youtube.com/watch?v=2rRsTL030AA", "name": "Sizzla - Get We Out"}, {"album": "Sizzla - Liberate Yourself (LP One) (2000)", "id": "rLBSAy0tDUU", "link": "https://www.youtube.com/watch?v=rLBSAy0tDUU", "name": "Sizzla - Liberate Yourself"}];
+            var pendingAlbums = [3522905, 3584938, 3089332, 3584936, 6582324, 4667681, 5958267, 1422540, 1791621, 4023777, 2923041, 4667687, 6011484, 2798602, 5494700, 5759180, 1422530, 2934352, 3438036, 3742849, 14208019, 15209557, 3540294, 4867539, 6397988, 2800409, 2923033, 2834809, 7626785, 2455056, 4158503, 5325997, 7012751, 5932337, 7710645, 6818559, 8956869];
+            var albumTitles = {}; albumTitles[3198889] = "Mystic Revealers - Rastaman In New York (1993)";albumTitles[3769083] = "Sizzla - Get We Out (1999)";albumTitles[1419205] = "Sizzla - Liberate Yourself (LP One) (2000)";albumTitles[3522905] = "Prezident Brown - Micro-Chip (1999)";albumTitles[3584938] = "Doniki \u0026 Steady* - Bad Fruit (1995)";albumTitles[3089332] = "Sizzla - Healing Of The Nation (1997)";albumTitles[3584936] = "Mystic Revealers - Bun Dem (1996)";albumTitles[6582324] = "Mystic Revealers - January To December (1994)";albumTitles[4667681] = "Bushman (3) - Somewhere (1999)";albumTitles[5958267] = "Daweh Congo - Rocky Foundation (1997)";albumTitles[1422540] = "Garnet Silk* - Wrong Is Wrong (1995)";albumTitles[1791621] = "Sizzla - And Bredren - Liberate Yourself (LP Two) (2000)";albumTitles[4023777] = "Jah Mason - Dem Have An\u0027dem Want (1997)";albumTitles[2923041] = "Doniki - Jah Live Forever (1997)";albumTitles[4667687] = "Terry Ganzie - Can\u0027t Dictate (1999)";albumTitles[6011484] = "Kulcha Knox - Who Jah Send (1999)";albumTitles[2798602] = "Kulcha Knox - Ma Ma Warrior (1997)";albumTitles[5494700] = "Chachi (3) / B. Mystic* / Doniki \u0026 Steady*, Iquylah* - Warning (1997)";albumTitles[5759180] = "Sizzla - Takes Only Time (1997)";albumTitles[1422530] = "Mystic Revealers \u0026 Sizzla - Tell Them (1996)";albumTitles[2934352] = "Ernie Ranglin* - Natty Dread (1995)";albumTitles[3438036] = "Prezident Brown - Mystery Babylon (1995)";albumTitles[3742849] = "Sizzla And Bredren (2) - Liberate Yourself  (2000)";albumTitles[14208019] = "Sizzla - From Long Time (1997)";albumTitles[15209557] = "Garnet Silk* - Sayonara (1997)";albumTitles[3540294] = "Sister Carol - Always Be A Ras (1995)";albumTitles[4867539] = "Mystic Revealers - Space And Dub (1996)";albumTitles[6397988] = "Doniki \u0026 Steady* - Hills \u0026 Valley (1995)";albumTitles[2800409] = "President Brown* - Word Of Encouragement (1997)";albumTitles[2923033] = "Prezident Brown - Rough Road (1995)";albumTitles[2834809] = "Mystic Revealers / Anthony B - I\u0027m Gonna Tell You (1997)";albumTitles[7626785] = "Kulcha Knox - Dread Natty (1995)";albumTitles[2455056] = "Brian \u0026 Tony Gold - I Can\u0027t Stand The Rain (1997)";albumTitles[4158503] = "General T.K. - KKK (1995)";albumTitles[5325997] = "Sizzla - By Your Words (1997)";albumTitles[7012751] = "Prezident Brown - Faith / In This Life (1998)";albumTitles[5932337] = "Chezidek - Congregation (1997)";albumTitles[7710645] = "Mystic Revealers, Rapper Robert* - When I Am Far Away (1995)";albumTitles[6818559] = "Jack Radics - Pull Your Kotch (1995)";albumTitles[8956869] = "Ernie Ranglin* - Tribute To A Legend (1997)";
+            var seenIds = {}; tracks.forEach(function (t) { seenIds[t.id] = true; });
+            var order = tracks.map(function (_, i) { return i; });
+            var pos = 0, player = null, ready = false, failures = 0;
+            var skipped = {}, broken = {}, dir = 1, ended = false;
+            var KEY = "dustyDiggerKeepers";
+
+            function $(id) { return document.getElementById(id); }
+            function keepers() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
+            function saveKeepers(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
+            function isKept(t) { return keepers().some(function (k) { return k.id === t.id; }); }
+            function current() { return tracks[order[pos]]; }
+            function hasTracks() { return order.length > 0; }
+
+            function renderQueue() {
+                var ol = $("queue"); ol.innerHTML = "";
+                order.forEach(function (ti, i) {
+                    var t = tracks[ti], li = document.createElement("li");
+                    li.textContent = t.name;
+                    if (isKept(t)) { var h = document.createElement("span"); h.className = "heart"; h.textContent = " (kept)"; li.appendChild(h); }
+                    if (i === pos) li.className = "current";
+                    else if (skipped[t.id]) li.className = "skipped";
+                    li.onclick = function () { go(i); };
+                    ol.appendChild(li);
+                });
+                var cur = ol.children[pos];
+                if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest" });
+            }
+
+            function renderNow() {
+                var more = pendingAlbums.length ? " still digging..." : "";
+                if (!hasTracks()) { $("now-count").textContent = pendingAlbums.length ? "(still digging...)" : ""; if (!pendingAlbums.length) $("now-title").textContent = "no playable videos found for these records."; return; }
+                var t = current();
+                $("now-title").textContent = t.name;
+                $("now-sub").textContent = "(from " + t.album + ")";
+                $("now-count").textContent = "[" + (pos + 1) + " of " + order.length + "]" + more;
+                var kept = isKept(t);
+                $("btn-keep").textContent = kept ? "un-keep" : "keep";
+            }
+
+            function renderKeepers() {
+                var list = keepers(), ul = $("keepers"); ul.innerHTML = "";
+                $("keepers-empty").style.display = list.length ? "none" : "";
+                list.forEach(function (k) {
+                    var li = document.createElement("li"), a = document.createElement("a");
+                    a.href = k.link || ("https://www.youtube.com/watch?v=" + k.id); a.target = "_blank"; a.rel = "noopener";
+                    a.textContent = k.name || ((k.artist ? k.artist + " - " : "") + k.title);
+                    var rm = document.createElement("button"); rm.type = "button"; rm.textContent = "remove";
+                    rm.onclick = function () { saveKeepers(keepers().filter(function (x) { return x.id !== k.id; })); renderAll(); };
+                    li.appendChild(a); li.appendChild(document.createTextNode(" ")); li.appendChild(rm);
+                    ul.appendChild(li);
+                });
+            }
+
+            function renderAll() { renderNow(); renderQueue(); renderKeepers(); }
+
+            function go(i) {
+                if (i < 0 || i >= order.length) return;
+                ended = false;
+                dir = i >= pos ? 1 : -1;
+                pos = i;
+                renderAll();
+                if (ready) player.loadVideoById(current().id);
+            }
+
+            // Step over tracks YouTube already refused, in the direction we're moving.
+            function step(from, d) {
+                for (var i = from + d; i >= 0 && i < order.length; i += d) if (!broken[tracks[order[i]].id]) return i;
+                return -1;
+            }
+            function back() { var i = step(pos, -1); if (i >= 0) go(i); }
+
+            function next(markSkipped) {
+                if (markSkipped) skipped[current().id] = true;
+                var i = step(pos, 1);
+                if (i >= 0) go(i);
+                else if (pendingAlbums.length) { ended = true; $("now-title").textContent = "still digging, next song starts when it shows up..."; $("now-sub").textContent = ""; }
+                else { $("now-title").textContent = "end of the list."; $("now-sub").textContent = ""; }
+            }
+
+            function toggleKeep() {
+                if (!hasTracks()) return;
+                var t = current(), list = keepers();
+                if (isKept(t)) list = list.filter(function (k) { return k.id !== t.id; });
+                else list.push({ id: t.id, name: t.name, album: t.album, link: t.link });
+                saveKeepers(list); renderAll();
+            }
+
+            function shuffle() {
+                var cur = order[pos], rest = order.filter(function (_, i) { return i > pos; });
+                for (var i = rest.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var x = rest[i]; rest[i] = rest[j]; rest[j] = x; }
+                order = order.slice(0, pos).concat([cur], rest);
+                renderAll();
+            }
+
+            $("btn-next").onclick = function () { next(true); };
+            $("btn-prev").onclick = back;
+            $("btn-keep").onclick = toggleKeep;
+            $("btn-shuffle").onclick = shuffle;
+            $("btn-play").onclick = function () {
+                if (!ready) return;
+                if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+            };
+            $("btn-size").onclick = function () {
+                var p = $("player"); p.classList.toggle("compact");
+                this.textContent = p.classList.contains("compact") ? "show video" : "hide video";
+            };
+            document.addEventListener("click", function (e) {
+                var b = e.target.closest && e.target.closest(".play-here");
+                if (!b) return;
+                e.preventDefault();
+                var id = b.getAttribute("data-yt");
+                var i = order.findIndex(function (ti) { return tracks[ti].id === id; });
+                if (i >= 0) { go(i); $("player").scrollIntoView(); }
+            });
+
+            // ---- Fetch the albums the server didn't have room for, a few seconds apart
+            //      (Discogs allows ~60 lookups a minute), and add their songs to the playlist.
+            function addAlbumTracks(albumId, list) {
+                var li = document.querySelector('[data-pending="' + albumId + '"]');
+                var ul = li && li.parentNode;
+                if (li) li.remove();
+                var title = albumTitles[albumId] || "";
+                if (ul && !list.length) { var n = document.createElement("li"); n.className = "none"; n.textContent = "No videos on Discogs for this one."; ul.appendChild(n); }
+                if (ul && list.length && list[0].thumb) {
+                    var head = ul.parentNode.querySelector(".album-header");
+                    if (head && !head.querySelector("img")) { var img = document.createElement("img"); img.src = list[0].thumb; img.alt = "Album thumbnail"; head.insertBefore(img, head.firstChild); }
+                }
+                var wasEmpty = !hasTracks();
+                list.forEach(function (v) {
+                    if (ul) {
+                        var item = document.createElement("li"), a = document.createElement("a");
+                        a.href = v.link; a.target = "_blank"; a.rel = "noopener"; a.textContent = v.name;
+                        item.appendChild(a);
+                        if (v.yt) { var b = document.createElement("a"); b.href = "#"; b.className = "play-here"; b.setAttribute("data-yt", v.yt); b.textContent = "[play here]"; item.appendChild(document.createTextNode(" ")); item.appendChild(b); }
+                        ul.appendChild(item);
+                    }
+                    if (v.yt && !seenIds[v.yt]) {
+                        seenIds[v.yt] = true;
+                        tracks.push({ id: v.yt, name: v.name, album: title, link: v.link });
+                        order.push(tracks.length - 1);
+                    }
+                });
+                if (wasEmpty && hasTracks()) { pos = 0; startPlayer(); }
+                else if (ended && pos < order.length - 1) next(false);
+                renderNow(); renderQueue();
+            }
+
+            function loadMore() {
+                if (!pendingAlbums.length) { renderNow(); return; }
+                var id = pendingAlbums[0], tries = 0;
+                (function attempt() {
+                    fetch("/tracks/" + id).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+                    .then(function (res) {
+                        if (res.ok) { pendingAlbums.shift(); addAlbumTracks(id, res.j.tracks || []); setTimeout(loadMore, 1100); }
+                        else if (++tries < 6) setTimeout(attempt, ((res.j && res.j.retry) || 5) * 1000);
+                        else { pendingAlbums.shift(); addAlbumTracks(id, []); setTimeout(loadMore, 1100); }
+                    })
+                    .catch(function () { if (++tries < 6) setTimeout(attempt, 5000); else { pendingAlbums.shift(); setTimeout(loadMore, 1100); } });
+                })();
+            }
+            document.addEventListener("keydown", function (e) {
+                if (/input|textarea/i.test((e.target.tagName || ""))) return;
+                if (e.key === "ArrowRight" || e.key === "n" || e.key === "N") { next(true); e.preventDefault(); }
+                else if (e.key === "ArrowLeft") { back(); e.preventDefault(); }
+                else if (e.key === "k" || e.key === "K") { toggleKeep(); }
+                else if (e.key === " " && ready) {
+                    e.preventDefault();
+                    if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+                }
+            });
+
+            renderAll();
+            setTimeout(loadMore, 1500);
+
+            var apiReady = false;
+            function startPlayer() {
+                if (!apiReady || player || !hasTracks()) return;
+                player = new YT.Player("yt", {
+                    width: 480, height: 270,
+                    videoId: current().id,
+                    playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+                    events: {
+                        onReady: function () { ready = true; },
+                        onStateChange: function (e) {
+                            if (e.data === YT.PlayerState.PLAYING) { failures = 0; /* playing */ }
+                            else if (e.data === YT.PlayerState.PAUSED) { /* paused */ }
+                            else if (e.data === YT.PlayerState.ENDED) next(false);
+                        },
+                        onError: function () {
+                            // Removed or not allowed outside YouTube: move on (stop after many in a row).
+                            broken[current().id] = skipped[current().id] = true;
+                            if (++failures >= 15) return;
+                            var i = step(pos, dir);
+                            if (i < 0) i = step(pos, -dir);
+                            if (i >= 0) { var keepDir = dir; go(i); dir = keepDir; }
+                        }
+                    }
+                });
+            }
+            window.onYouTubeIframeAPIReady = function () { apiReady = true; startPlayer(); };
+            var s = document.createElement("script");
+            s.src = "https://www.youtube.com/iframe_api";
+            document.head.appendChild(s);
+        })();
+        </script>
+        
+    
+
+    <a href="/">Keep on digging 👷 </a>
+
+</body>
+
+</html>

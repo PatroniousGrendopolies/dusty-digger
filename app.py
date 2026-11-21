@@ -459,6 +459,58 @@ def tracks(album_id):
     return jsonify({"tracks": videos})
 
 
+_ARTISTS = {}
+
+
+@app.route("/artists")
+def artists():
+    """Artist names for the home page's autofill, from Discogs."""
+    q = (request.args.get("q") or "").strip()[:60]
+    if len(q) < 2:
+        return jsonify([])
+    key = q.lower()
+    if key not in _ARTISTS:
+        token = os.environ.get("DISCOGS_TOKEN")
+        if not token:
+            return jsonify([])
+        dig = Digger(token)
+        dig.deadline = time.monotonic() + 5
+        data = dig.get("/database/search", q=q, type="artist", per_page=15)
+        if data is None:
+            return jsonify([])
+        names, seen = [], set()
+        for r in data.get("results") or []:
+            name = clean_label(r.get("title"))  # drops Discogs' "(2)" numbering
+            if name and name.lower() not in seen:
+                seen.add(name.lower())
+                names.append(name)
+        if len(_ARTISTS) > 2000:
+            _ARTISTS.clear()
+        _ARTISTS[key] = names[:8]
+    resp = jsonify(_ARTISTS[key])
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
+@app.route("/playlist")
+def playlist():
+    """Turn up to 50 YouTube ids into a real YouTube playlist link, so the songs can be
+    opened in the YouTube app and cast to a TV from there."""
+    ids = [i for i in (request.args.get("ids") or "").split(",") if re.fullmatch(r"[\w-]{11}", i)][:50]
+    if not ids:
+        return jsonify({"url": None}), 400
+    direct = "https://www.youtube.com/watch_videos?video_ids=" + ",".join(ids)
+    try:
+        r = requests.get(direct, allow_redirects=False, timeout=6,
+                         headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
+        loc = r.headers.get("Location") or ""
+        if "list=" in loc:
+            return jsonify({"url": loc if loc.startswith("http") else "https://www.youtube.com" + loc})
+    except requests.RequestException:
+        pass
+    return jsonify({"url": direct})
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     if request.method == "POST":

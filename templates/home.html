@@ -9,28 +9,41 @@
 
 <body>
     <h1> 🚧 Welcome to Dusty Digger 🚧  </h1>
-    <p><b>Dusty digging for deep nuggets.</b></p>
-    <p>Type in a song you love and pick how to dig:</p>
-    <ul>
-        <li><b>By label:</b> finds the record label that first put the song out (on Discogs) and digs up other records
-            that label released around the same time, in the same style.</li>
-        <li><b>By uploader:</b> finds who posted the song on YouTube. Obscure tracks are usually posted by nerdy
-            crate-digging DJs and collectors, so it digs through everything else on their channel, most relevant first
-            (same genre, same era, same artist). You can tick which genres you want.</li>
-    </ul>
-    <p>Either way it lines up all the songs in a player so you can listen through, skip what you don't like, and hit
-        "keep" on the good ones. Works best with older or more obscure songs.</p>
-    <hr>
+    <p>Dusty digging for deep nuggets. Pick a song and how you'd like to dig.</p>
     <form action="/" method="post">
         <label for="song_name">What song would you like to dig:</label><br>
         <input type="text" id="song_name" name="song_name"><br>
         <label for="artist_name">And by which artist?:</label><br>
-        <input type="text" id="artist_name" name="artist_name"><br>
+        <input type="text" id="artist_name" name="artist_name" list="artist_list" autocomplete="off"><br>
+        <datalist id="artist_list"></datalist>
         Dig by:
-        <input type="radio" id="mode_label" name="mode" value="label" checked><label for="mode_label">label</label>
-        <input type="radio" id="mode_uploader" name="mode" value="uploader"><label for="mode_uploader">uploader</label><br>
+        <input type="radio" id="mode_label" name="mode" value="label" checked><label for="mode_label">label</label> <small>(same label, same era)</small>
+        <input type="radio" id="mode_uploader" name="mode" value="uploader"><label for="mode_uploader">uploader</label> <small>(same YouTube channel)</small><br>
         <input type="submit" value="Submit">
     </form>
+
+    <script>
+    (function () {
+        var input = document.getElementById("artist_name"), list = document.getElementById("artist_list");
+        var timer = null, cache = {};
+        function fill(names) {
+            list.innerHTML = "";
+            names.forEach(function (n) { var o = document.createElement("option"); o.value = n; list.appendChild(o); });
+        }
+        input.addEventListener("input", function () {
+            var q = input.value.trim();
+            clearTimeout(timer);
+            if (q.length < 2) { fill([]); return; }
+            if (cache[q.toLowerCase()]) { fill(cache[q.toLowerCase()]); return; }
+            timer = setTimeout(function () {
+                fetch("/artists?q=" + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (names) {
+                    cache[q.toLowerCase()] = names;
+                    if (input.value.trim() === q) fill(names);
+                }).catch(function () {});
+            }, 300);
+        });
+    })();
+    </script>
 </body>
 
 </html>

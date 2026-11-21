@@ -58,6 +58,8 @@
             <button type="button" id="btn-keep">keep</button>
             <button type="button" id="btn-shuffle">shuffle</button>
             <button type="button" id="btn-size">hide video</button>
+            <button type="button" id="btn-cast">cast to tv</button>
+            <p id="cast-box" style="display:none"></p>
             <p><small>keys: right arrow or N = skip, left arrow = back, K = keep, space = play/pause. songs that won't play get skipped.</small></p>
             <div class="queue"><ol id="queue"></ol></div>
             <p><b>Keepers:</b></p>
@@ -197,6 +199,31 @@
             $("btn-prev").onclick = back;
             $("btn-keep").onclick = toggleKeep;
             $("btn-shuffle").onclick = shuffle;
+            $("btn-cast").onclick = function () {
+                var ids = [];
+                for (var i = pos; i < order.length && ids.length < 50; i++) {
+                    var t = tracks[order[i]];
+                    if (t && !broken[t.id]) ids.push(t.id);
+                }
+                if (!ids.length) return;
+                if (ready && player.pauseVideo) player.pauseVideo();
+                var box = $("cast-box");
+                box.style.display = "";
+                box.innerHTML = "<small>making a youtube playlist...</small>";
+                var direct = "https://www.youtube.com/watch_videos?video_ids=" + ids.join(",");
+                function show(url) {
+                    box.innerHTML = "";
+                    var a = document.createElement("a");
+                    a.href = url; a.target = "_blank"; a.rel = "noopener";
+                    a.textContent = "open the next " + ids.length + " songs in YouTube";
+                    var s = document.createElement("small");
+                    s.textContent = " then hit the cast button in YouTube and pick your Chromecast. kept songs stay saved here.";
+                    box.appendChild(a); box.appendChild(s);
+                }
+                fetch("/playlist?ids=" + ids.join(",")).then(function (r) { return r.json(); })
+                    .then(function (j) { show(j.url || direct); }).catch(function () { show(direct); });
+            };
+
             $("btn-play").onclick = function () {
                 if (!ready) return;
                 if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
