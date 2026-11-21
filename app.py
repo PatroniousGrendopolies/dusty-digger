@@ -81,13 +81,13 @@ class Digger:
 def search_song(dig, song_name, artist_name):
     """Find the song, then step back to its ORIGINAL release (not a later reissue),
     so the label and the era are the ones it first came out on."""
-    data = dig.get("/database/search", q=f"{song_name} {artist_name}".strip(), type="release")
+    data = dig.get("/database/search", q=f"{song_name} {artist_name}".strip(), type="release", per_page=50)
     if data is None:
         raise DiscogsError(BUSY)
     results = data.get("results") or []
     if not results:
         return None
-    first = results[0]
+    first = pick_original(results, artist_name)
     release_id = first.get("id")
     master_id = first.get("master_id")
     if master_id:
@@ -109,6 +109,28 @@ def search_song(dig, song_name, artist_name):
         "styles": release.get("styles") or first.get("style") or [],
         "labels": label_names(release),
     }
+
+
+def pick_original(results, artist_name):
+    """Prefer the artist's own single/album over later compilations and reissues:
+    among results that aren't compilations (and name the artist, when given), take the earliest."""
+    def year(r):
+        y = str(r.get("year") or "")
+        return int(y) if y.isdigit() and int(y) > 0 else 9999
+
+    def is_comp(r):
+        return any("compilation" in (f or "").lower() for f in r.get("format") or []) or \
+            (r.get("title") or "").lower().startswith("various")
+
+    want = norm(artist_name)
+    pool = [r for r in results if not is_comp(r)]
+    if want:
+        named = [r for r in pool if want in norm(r.get("title"))]
+        pool = named or pool
+    if not pool:
+        return results[0]
+    best = min(year(r) for r in pool)
+    return next(r for r in pool if year(r) == best)
 
 
 def label_names(release):
