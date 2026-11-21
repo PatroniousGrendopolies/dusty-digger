@@ -19,7 +19,7 @@
 
     <h1>Results</h1>
 
-    {% if query %}<p>You searched for: <b>{{ query }}</b>{% if result is not string and result.song %}<br>Closest match on Discogs: <b>{{ result.song }}</b>{% if result.year %} ({{ result.year }}){% endif %}{% endif %}</p>{% endif %}
+    {% include "_digging_on.html" %}
 
     {% if result is string %}
         <p>{{ result }}</p>

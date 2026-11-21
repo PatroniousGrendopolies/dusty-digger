@@ -80,9 +80,34 @@ class Digger:
         return None
 
 
-def search_song(dig, song_name, artist_name):
-    """Find the song, then step back to its ORIGINAL release (not a later reissue),
-    so the label and the era are the ones it first came out on."""
+def _num_year(y):
+    y = str(y or "")[:4]
+    return int(y) if y.isdigit() and int(y) > 0 else None
+
+
+def versions_of(dig, master_id):
+    """Every pressing of the record, oldest first: [{id, label, year, country}], one per label+year."""
+    data = dig.get(f"/masters/{master_id}/versions", per_page=100, sort="released", sort_order="asc")
+    out, seen = [], set()
+    for v in (data or {}).get("versions") or []:
+        fmt = (v.get("format") or "").lower()
+        if "unofficial" in fmt or "compilation" in fmt or not v.get("id"):
+            continue
+        label = clean_label((v.get("label") or "").split(",")[0]) or "no label"
+        year = _num_year(v.get("released"))
+        key = (label.lower(), year)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"id": v["id"], "label": label, "year": year, "country": v.get("country") or ""})
+    out.sort(key=lambda v: (v["year"] is None, v["year"] or 0))
+    return out
+
+
+def search_song(dig, song_name, artist_name, release_id=None):
+    """Find the song, then step back to its ORIGINAL release: the oldest pressing, so the
+    label and the era are the ones it first came out on (not a later reissue).
+    release_id picks a specific pressing instead (the 'dig a different version' menu)."""
     data = dig.get("/database/search", q=f"{song_name} {artist_name}".strip(), type="release", per_page=50)
     if data is None:
         raise DiscogsError(BUSY)
@@ -90,30 +115,62 @@ def search_song(dig, song_name, artist_name):
     if not results:
         return None
     first = pick_original(results, artist_name)
-    release_id = first.get("id")
     master_id = first.get("master_id")
-    if master_id:
-        master = dig.get(f"/masters/{master_id}")
-        if master and master.get("main_release"):
-            release_id = master["main_release"]
-    release = dig.get(f"/releases/{release_id}")
+    options = versions_of(dig, master_id) if master_id else []
+    if not options:
+        # No master on Discogs: the other pressings are the search hits with the same title.
+        title = norm(first.get("title"))
+        seen = set()
+        for r in sorted(results, key=lambda r: _num_year(r.get("year")) or 9999):
+            if norm(r.get("title")) != title:
+                continue
+            label = clean_label((r.get("label") or ["no label"])[0])
+            key = (label.lower(), _num_year(r.get("year")))
+            if key not in seen:
+                seen.add(key)
+                options.append({"id": r["id"], "label": label, "year": key[1], "country": r.get("country") or ""})
+    chosen = None
+    if release_id:
+        chosen = int(release_id)
+    elif options and options[0]["year"]:
+        chosen = options[0]["id"]  # the oldest pressing is the original
+    else:
+        chosen = first.get("id")
+    release = dig.get(f"/releases/{chosen}")
+    if release is None and chosen != first.get("id"):
+        chosen = first.get("id")
+        release = dig.get(f"/releases/{chosen}")
     if release is None:
         raise DiscogsError(BUSY)
-    years = [y for y in [release.get("year")] + [r.get("year") for r in results[:10]
-                                                   if r.get("master_id") == master_id and master_id]
-             if str(y or "").isdigit() and int(y) > 0]
+    year = _num_year(release.get("year"))
+    if not year:
+        year = next((o["year"] for o in options if o["id"] == chosen and o["year"]), None)
+    if not year and not release_id:
+        year = next((o["year"] for o in options if o["year"]), None)
+    labels = label_names(release)
     return {
-        "id": release_id,
+        "id": chosen,
         "name": display_title(artist_names(release.get("artists")), release.get("title") or ""),
+        "url": release.get("uri") or f"https://www.discogs.com/release/{chosen}",
         "master_id": master_id,
-        "year": min(int(y) for y in years) if years else None,
+        "year": year,
+        "label": labels[0] if labels else None,
+        "country": release.get("country") or "",
+        "options": options[:40],
         "genres": release.get("genres") or first.get("genre") or [],
         "styles": release.get("styles") or first.get("style") or [],
-        "labels": label_names(release),
+        "labels": labels,
         "label_refs": label_list(release),
         "videos": [{"yt": youtube_id(v.get("uri")), "title": v.get("title") or ""}
                    for v in release.get("videos") or [] if youtube_id(v.get("uri"))],
     }
+
+
+def disc_info(song):
+    """What the results page shows about the record being dug on."""
+    if not song:
+        return None
+    return {k: song.get(k) for k in ("id", "name", "url", "year", "label", "country", "options")}
 
 
 def pick_original(results, artist_name):
@@ -383,13 +440,13 @@ def album_title(album):
     return f"{album['title']} ({album['year']})" if album.get("year") else album["title"]
 
 
-def dig_song(token, song_name, artist_name):
+def dig_song(token, song_name, artist_name, release_id=None):
     dig = Digger(token)
-    song = search_song(dig, song_name, artist_name)
+    song = search_song(dig, song_name, artist_name, release_id)
     if song is None:
         return NO_MATCH
     if not song["labels"]:
-        return {"label_names": ["an unknown label"], "albums": [], "playlist": [], "year": song["year"], "song": song["name"]}
+        return {"label_names": ["an unknown label"], "albums": [], "playlist": [], "year": song["year"], "song": song["name"], "disc": disc_info(song)}
 
     albums = get_top_albums(dig, song)
 
@@ -418,17 +475,21 @@ def dig_song(token, song_name, artist_name):
                 playlist.append({"id": v["yt"], "name": v["name"],
                                  "album": album_title(a), "link": v["link"]})
 
-    return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"]}
+    return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"],
+            "disc": disc_info(song)}
 
 
-def dig_by_uploader(token, song_name, artist_name):
+def dig_by_uploader(token, song_name, artist_name, release_id=None):
     song = None
     if token:
         try:
-            song = search_song(Digger(token), song_name, artist_name)
+            song = search_song(Digger(token), song_name, artist_name, release_id)
         except DiscogsError:
             song = None  # Discogs only helps rank; YouTube can still do the digging
-    return uploader.dig_uploader(song, song_name, artist_name)
+    result = uploader.dig_uploader(song, song_name, artist_name)
+    if isinstance(result, dict):
+        result["disc"] = disc_info(song)
+    return result
 
 
 @app.route("/uploads")
@@ -520,23 +581,26 @@ def home():
             return render_template("home.html")
         token = os.environ.get("DISCOGS_TOKEN")
         query = " by ".join(x for x in (song_name, artist_name) if x)
+        release_id = request.form.get("release_id") or ""
+        release_id = release_id if release_id.isdigit() else None
+        form = {"song_name": song_name, "artist_name": artist_name, "mode": request.form.get("mode") or "label"}
         if request.form.get("mode") == "uploader":
             try:
-                result = dig_by_uploader(token, song_name, artist_name)
+                result = dig_by_uploader(token, song_name, artist_name, release_id)
             except Exception:
                 app.logger.exception("uploader dig failed")
                 result = "YouTube didn't answer. Give it a minute and dig again."
-            return render_template("uploader.html", result=result, query=query)
+            return render_template("uploader.html", result=result, query=query, form=form)
         if not token:
             return render_template("results.html", result=NO_TOKEN, query="")
         try:
-            result = dig_song(token, song_name, artist_name)
+            result = dig_song(token, song_name, artist_name, release_id)
         except DiscogsError as e:
             result = str(e)
         except Exception:
             app.logger.exception("dig failed")
             result = BUSY
-        return render_template("results.html", result=result, query=" by ".join(x for x in (song_name, artist_name) if x))
+        return render_template("results.html", result=result, query=query, form=form)
 
     return render_template("home.html")
 

@@ -1,0 +1,18 @@
+{% if query %}<p>You searched for: <b>{{ query }}</b></p>{% endif %}
+{% if result is not string and result.disc %}{% set d = result.disc %}
+<p>Digging on: <a href="{{ d.url }}" target="_blank" rel="noopener"><b>{{ d.name }}</b></a>
+    ({% if d.label %}{{ d.label }}{% endif %}{% if d.year %}, {{ d.year }}{% endif %}{% if d.country %}, {{ d.country }}{% endif %}) <small>on Discogs</small>
+{% if d.options and d.options|length > 1 %}
+<form action="/" method="post" style="margin:0" onsubmit="this.querySelector('input[type=submit]').value='digging...'">
+    <small>wrong version? pick another pressing:</small>
+    <input type="hidden" name="song_name" value="{{ form.song_name }}">
+    <input type="hidden" name="artist_name" value="{{ form.artist_name }}">
+    <input type="hidden" name="mode" value="{{ form.mode }}">
+    <select name="release_id">
+    {% for o in d.options %}<option value="{{ o.id }}"{% if o.id == d.id %} selected{% endif %}>{{ o.year or "no year" }} - {{ o.label }}{% if o.country %} ({{ o.country }}){% endif %}{% if loop.first and o.year %} - oldest{% endif %}</option>
+    {% endfor %}</select>
+    <input type="submit" value="dig this one">
+</form>
+{% endif %}</p>
+{% elif query and result is not string and result.song %}<p>Closest match on Discogs: <b>{{ result.song }}</b>{% if result.year %} ({{ result.year }}){% endif %}</p>
+{% endif %}
