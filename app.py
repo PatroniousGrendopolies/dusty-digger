@@ -141,6 +141,10 @@ def fits(song, album):
         return False
     if song["styles"] and styles and not set(styles) & set(song["styles"]):
         return False
+    # No styles to compare: then it mustn't bring in a genre the original doesn't have
+    # (e.g. a Hip Hop + Reggae Sade single on a roots label).
+    if song["genres"] and not styles and set(genres) - set(song["genres"]):
+        return False
     return True
 
 
