@@ -1,109 +1,204 @@
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import requests
 from flask import Flask, render_template, request
 
 app = Flask(__name__)
 
-# Discogs personal token, read from the environment (never commit it)
-user_token = os.environ["DISCOGS_TOKEN"]
+API = "https://api.discogs.com"
+USER_AGENT = "DustyDigger/1.1 +https://dusty-digger.vercel.app"
 
-def search_song(user_token, song_name, artist_name):
-    headers = {
-        "Authorization": f"Discogs token={user_token}",
-        "User-Agent": "DiscogsAPIExample/1.0 +http://example.com",
-    }
-    url = "https://api.discogs.com/database/search"
-    response = requests.get(url, headers=headers, params={"q": f"{song_name} {artist_name}", "type": "release"})
-    data = response.json()
+# How much digging one search may do. Discogs allows about 60 requests a minute,
+# and each album's track list is one request, so we look up a handful of albums
+# instead of 50, and stop early if the clock runs out.
+MAX_LABELS = 2
+MAX_ALBUMS = 12
+TIME_BUDGET = 20  # seconds per search
 
-    if data['pagination']['items'] == 0:
+NO_MATCH = "We've hit a rock! No match found for the song"
+BUSY = "Discogs is busy right now. Give it a minute and dig again."
+NO_TOKEN = "Dusty Digger isn't connected to Discogs yet (DISCOGS_TOKEN is missing)."
+
+
+class DiscogsError(Exception):
+    pass
+
+
+class Digger:
+    """One search's worth of Discogs calls, sharing a session, a token and a deadline."""
+
+    def __init__(self, token):
+        self.deadline = time.monotonic() + TIME_BUDGET
+        self.session = requests.Session()
+        self.session.headers.update({
+            "Authorization": f"Discogs token={token}",
+            "User-Agent": USER_AGENT,
+        })
+
+    def time_left(self):
+        return self.deadline - time.monotonic()
+
+    def get(self, path, **params):
+        """GET a Discogs endpoint. Returns parsed JSON, or None when Discogs says no.
+
+        Discogs answers "too many requests" (429) with a plain-text page, which is
+        what used to crash the app. Wait once if there's time, otherwise give up
+        on this call instead of falling over.
+        """
+        for attempt in range(2):
+            if self.time_left() <= 1:
+                return None
+            try:
+                r = self.session.get(f"{API}{path}", params=params or None, timeout=min(8, self.time_left()))
+            except requests.RequestException:
+                return None
+            if r.status_code == 429 and attempt == 0:
+                try:
+                    wait = float(r.headers.get("Retry-After") or 2)
+                except ValueError:
+                    wait = 2
+                if wait < self.time_left() - 2:
+                    time.sleep(min(wait, 5))
+                    continue
+                return None
+            if r.status_code != 200:
+                return None
+            try:
+                return r.json()
+            except ValueError:
+                return None
+        return None
+
+
+def search_song(dig, song_name, artist_name):
+    data = dig.get("/database/search", q=f"{song_name} {artist_name}".strip(), type="release")
+    if data is None:
+        raise DiscogsError(BUSY)
+    results = data.get("results") or []
+    if not results:
         return None, None
-    else:
-        genre = data['results'][0]['genre'][0] if data['results'][0]['genre'] else None
-        return data['results'][0]['id'], genre
+    first = results[0]
+    genres = first.get("genre") or []
+    return first.get("id"), (genres[0] if genres else None)
 
-def get_label_of_song(user_token, song_id):
-    headers = {
-        "Authorization": f"Discogs token={user_token}",
-        "User-Agent": "DiscogsAPIExample/1.0 +http://example.com",
-    }
-    url = f"https://api.discogs.com/releases/{song_id}"
-    response = requests.get(url, headers=headers)
-    data = response.json()
-    labels = [label['name'] for label in data['labels']] if data['labels'] else ["No label found"]
-    return labels
 
-def get_top_albums(user_token, label_names, genre, num_albums=50):
-    headers = {
-        "Authorization": f"Discogs token={user_token}",
-        "User-Agent": "DiscogsAPIExample/1.0 +http://example.com",
-    }
-    top_albums = []
+def get_label_of_song(dig, song_id):
+    data = dig.get(f"/releases/{song_id}")
+    if data is None:
+        raise DiscogsError(BUSY)
+    names = []
+    for label in data.get("labels") or []:
+        name = (label.get("name") or "").strip()
+        if name and name not in names and name.lower() != "not on label":
+            names.append(name)
+    return names[:MAX_LABELS]
+
+
+def get_top_albums(dig, label_names, genre, exclude_id=None, num_albums=MAX_ALBUMS):
+    """Other releases on the same label(s), same genre, most-collected first."""
+    seen_titles, albums = set(), []
     for label_name in label_names:
-        page = 1
-        while len(top_albums) < num_albums:
-            url = "https://api.discogs.com/database/search"
-            response = requests.get(url, headers=headers, params={"label": label_name, "type": "release", "sort": "rating", "sort_order": "desc", "per_page": 100, "page": page})
-            data = response.json()
-            filtered_albums = [album for album in data['results'] if genre in album.get('genre', [])]
-            top_albums.extend(filtered_albums)
-            if len(data['results']) < 100:  # less than 100 results, no more pages
-                break
-            page += 1
-    return [(album['id'], album['title'], album.get('rating', 'No rating available')) for album in top_albums[:num_albums]]
+        data = dig.get("/database/search", label=label_name, type="release", per_page=100)
+        if not data:
+            continue
+        for album in data.get("results") or []:
+            if album.get("id") == exclude_id:
+                continue
+            if genre and genre not in (album.get("genre") or []):
+                continue
+            title = album.get("title") or "Untitled"
+            if title.lower() in seen_titles:  # skip reissues/duplicates of the same record
+                continue
+            seen_titles.add(title.lower())
+            community = album.get("community") or {}
+            albums.append({
+                "id": album.get("id"),
+                "title": title,
+                "year": album.get("year"),
+                "want": community.get("want", 0) or 0,
+                "have": community.get("have", 0) or 0,
+            })
+    albums.sort(key=lambda a: a["want"] + a["have"], reverse=True)
+    return albums[:num_albums]
 
-'''
-#get album videos with an embedded video link (legacy); now retrieves a thumbnail.
-def get_album_videos(user_token, album_id):
-    headers = {
-        "Authorization": f"Discogs token={user_token}",
-        "User-Agent": "DiscogsAPIExample/1.0 +http://example.com",
+
+def get_album_videos(dig, album_id):
+    data = dig.get(f"/releases/{album_id}")
+    if not data:
+        return []
+    artists = data.get("artists") or [{}]
+    artist = artists[0].get("name", "Unknown artist")
+    thumb = data.get("thumb") or ""
+    return [
+        {"link": v.get("uri"), "thumb": thumb, "artist": artist, "title": v.get("title", "Untitled")}
+        for v in data.get("videos") or []
+        if v.get("embed") and v.get("uri")
+    ]
+
+
+def popularity(album):
+    bits = []
+    if album["want"]:
+        bits.append(f"{album['want']:,} want it")
+    if album["have"]:
+        bits.append(f"{album['have']:,} have it")
+    return " · ".join(bits) or "No rating available"
+
+
+def album_title(album):
+    return f"{album['title']} ({album['year']})" if album.get("year") else album["title"]
+
+
+def dig_song(token, song_name, artist_name):
+    dig = Digger(token)
+    song_id, genre = search_song(dig, song_name, artist_name)
+    if song_id is None:
+        return NO_MATCH
+    label_names = get_label_of_song(dig, song_id)
+    if not label_names:
+        return {"label_names": ["an unknown label"], "albums_with_videos": []}
+
+    albums = get_top_albums(dig, label_names, genre, exclude_id=song_id)
+
+    # Fetch track lists a few at a time; whatever misses the deadline shows without tracks.
+    videos = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(get_album_videos, dig, a["id"]): a["id"] for a in albums}
+        for fut in as_completed(futures):
+            try:
+                videos[futures[fut]] = fut.result()
+            except Exception:
+                videos[futures[fut]] = []
+
+    return {
+        "label_names": label_names,
+        "albums_with_videos": [(album_title(a), popularity(a), videos.get(a["id"], [])) for a in albums],
     }
-    url = f"https://api.discogs.com/releases/{album_id}"
-    response = requests.get(url, headers=headers)
-    data = response.json()
-    videos = [video['uri'].replace("https://www.youtube.com/watch?v=", "https://www.youtube.com/embed/") for video in data.get('videos', [])]
-    return videos
-'''
-def get_album_videos(user_token, album_id):
-    headers = {
-        "Authorization": f"Discogs token={user_token}",
-        "User-Agent": "DiscogsAPIExample/1.0 +http://example.com",
-    }
-    url = f"https://api.discogs.com/releases/{album_id}"
-    response = requests.get(url, headers=headers)
-    data = response.json()
-    videos = [{"link": video['uri'],
-               "thumb": data['thumb'], # use the album thumbnail
-               "artist": data['artists'][0]['name'], # assuming the first artist is the main one
-               "title": video['title']}
-              for video in data.get('videos', [])
-              if video['embed'] == True]
-    return videos
 
 
-
-
-
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def home():
-    if request.method == 'POST':
-        song_name = request.form.get('song_name')
-        artist_name = request.form.get('artist_name')
-        song_id, genre = search_song(user_token, song_name, artist_name)
-        if song_id is None:
-            return render_template("results.html", result="We've hit a rock! No match found for the song")
-        else:
-            label_names = get_label_of_song(user_token, song_id)
-            albums_with_videos = []
-            for label_name in label_names:
-                top_albums = get_top_albums(user_token, [label_name], genre)
-                for album in top_albums:
-                    videos = get_album_videos(user_token, album[0])
-                    albums_with_videos.append((album[1], album[2], videos))
-            return render_template("results.html", result={'label_names': label_names, 'albums_with_videos': albums_with_videos})
+    if request.method == "POST":
+        song_name = (request.form.get("song_name") or "").strip()
+        artist_name = (request.form.get("artist_name") or "").strip()
+        if not song_name and not artist_name:
+            return render_template("home.html")
+        token = os.environ.get("DISCOGS_TOKEN")
+        if not token:
+            return render_template("results.html", result=NO_TOKEN)
+        try:
+            result = dig_song(token, song_name, artist_name)
+        except DiscogsError as e:
+            result = str(e)
+        except Exception:
+            app.logger.exception("dig failed")
+            result = BUSY
+        return render_template("results.html", result=result)
 
-    return render_template('home.html')
+    return render_template("home.html")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app.run(debug=True, port=5008)

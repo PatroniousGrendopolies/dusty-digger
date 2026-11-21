@@ -33,10 +33,10 @@
 
     <h1>Results</h1>
 
-    {% if result == "We've hit a rock! No match found for the song" %}
+    {% if result is string %}
         <p>{{ result }}</p>
     {% else %}
-        <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}. Some of their other releases include:</p>
+        <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}.{% if result.albums_with_videos %} Some of their other releases include:{% else %} We couldn't dig up other releases from them this time.{% endif %}</p>
         <div>
             {% for album in result.albums_with_videos %}
                 <div class="album-container">
@@ -68,4 +68,3 @@
 </body>
 
 </html>
-"""
