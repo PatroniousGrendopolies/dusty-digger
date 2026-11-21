@@ -404,6 +404,20 @@ def _ytcheck():  # temporary diagnostics
     out["player"] = {"ok": d is not None, "status": ((d or {}).get("playabilityStatus") or {}).get("status"),
                      "reason": ((d or {}).get("playabilityStatus") or {}).get("reason"),
                      "has_details": bool((d or {}).get("videoDetails"))}
+    import json as _j
+    n = yt._post("next", {"videoId": "TlZP0nA9d5A"})
+    txt = _j.dumps(n or {})
+    out["next"] = {"ok": n is not None, "len": len(txt), "has_desc": "attributedDescription" in txt or "description" in txt,
+                   "has_owner": "videoOwnerRenderer" in txt, "snippet": txt[txt.find("attributedDescription"):txt.find("attributedDescription")+200]}
+    for client, ver in (("TVHTML5_SIMPLY_EMBEDDED_PLAYER", "2.0"), ("ANDROID_VR", "1.60.19"), ("WEB_EMBEDDED_PLAYER", "1.20241201.00.00")):
+        try:
+            r = yt.s.post("https://www.youtube.com/youtubei/v1/player", params={"prettyPrint": "false"},
+                          json={"videoId": "TlZP0nA9d5A", "context": {"client": {"clientName": client, "clientVersion": ver, "hl": "en"},
+                                "thirdParty": {"embedUrl": "https://www.youtube.com/"}}}, timeout=8)
+            j = r.json()
+            out["player_" + client] = {"status": (j.get("playabilityStatus") or {}).get("status"), "desc": bool((j.get("videoDetails") or {}).get("shortDescription")), "chan": (j.get("videoDetails") or {}).get("channelId")}
+        except Exception as e:
+            out["player_" + client] = str(e)[:100]
     s = yt._post("search", {"query": "Doniki Natural is jah mystic"})
     out["search_videos"] = len(list(uploader.walk(s, "videoRenderer")))
     try:
