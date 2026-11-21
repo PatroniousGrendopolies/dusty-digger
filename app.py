@@ -393,3 +393,27 @@ def home():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5008)
+
+
+@app.route("/_ytcheck")
+def _ytcheck():  # temporary diagnostics
+    import time as _t
+    yt = uploader.YouTube(_t.monotonic() + 20)
+    out = {}
+    d = yt._post("player", {"videoId": "TlZP0nA9d5A"})
+    out["player"] = {"ok": d is not None, "status": ((d or {}).get("playabilityStatus") or {}).get("status"),
+                     "reason": ((d or {}).get("playabilityStatus") or {}).get("reason"),
+                     "has_details": bool((d or {}).get("videoDetails"))}
+    s = yt._post("search", {"query": "Doniki Natural is jah mystic"})
+    out["search_videos"] = len(list(uploader.walk(s, "videoRenderer")))
+    try:
+        r = yt.s.get("https://www.youtube.com/channel/UC0SJYc9BnZ6KbCHbg0TZ7UA/videos", timeout=8)
+        out["channel_page"] = {"status": r.status_code, "len": len(r.text), "initial": "ytInitialData" in r.text, "url": r.url[:80]}
+    except Exception as e:
+        out["channel_page"] = str(e)
+    try:
+        r = yt.s.get("https://www.youtube.com/oembed", params={"url": "https://www.youtube.com/watch?v=TlZP0nA9d5A", "format": "json"}, timeout=8)
+        out["oembed"] = r.status_code
+    except Exception as e:
+        out["oembed"] = str(e)
+    return jsonify(out)
