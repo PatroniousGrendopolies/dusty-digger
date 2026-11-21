@@ -452,3 +452,22 @@ def home():
 if __name__ == "__main__":
     app.run(debug=True, port=5008)
 
+
+
+@app.route("/_labelcheck")
+def _labelcheck():  # temporary diagnostics
+    dig = Digger(os.environ.get("DISCOGS_TOKEN"))
+    song = search_song(dig, request.args.get("s", ""), request.args.get("a", ""))
+    out = {"song": {k: song.get(k) for k in ("id", "name", "year", "genres", "styles", "labels", "label_refs")}, "labels": []}
+    for ref in song["label_refs"]:
+        searched = label_search(dig, ref["clean"])
+        cat = label_catalogue(dig, ref["id"]) if ref.get("id") else []
+        raw = dig.get(f"/labels/{ref['id']}/releases", per_page=5, page=1, sort="year", sort_order="asc") if ref.get("id") else None
+        out["labels"].append({"ref": ref, "searched": len(searched), "catalogue": len(cat),
+                              "overlap": sum(1 for r in cat if r.get("id") in searched),
+                              "cat_years": sorted({str(r.get("year")) for r in cat})[:30],
+                              "raw_keys": list((raw or {}).keys()), "raw_first": (raw or {}).get("releases", [])[:2],
+                              "remaining": dig.remaining})
+    out["albums"] = len(get_top_albums(dig, song))
+    out["remaining_end"] = dig.remaining
+    return jsonify(out)
