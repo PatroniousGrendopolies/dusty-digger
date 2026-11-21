@@ -139,11 +139,16 @@ def fits(song, album):
     genres, styles = album.get("genre") or [], album.get("style") or []
     if song["genres"] and not set(genres) & set(song["genres"]):
         return False
-    if song["styles"] and styles and not set(styles) & set(song["styles"]):
+    # Styles that just repeat a genre name ("Reggae") say nothing about the sound.
+    generic = {g.lower() for g in list(genres) + list(song["genres"])}
+    mine = {x for x in song["styles"] if x.lower() not in generic}
+    theirs = {x for x in styles if x.lower() not in generic}
+    shared = mine & theirs
+    if mine and theirs and not shared:
         return False
-    # It mustn't bring in a genre the original doesn't have
-    # (e.g. Sade singles on a roots label tagged Hip Hop + Reggae or Reggae + Funk / Soul).
-    if song["genres"] and set(genres) - set(song["genres"]):
+    # Bringing in another genre (Sade singles on a roots label tagged Hip Hop or Funk / Soul)
+    # is only OK when a real style is shared (e.g. Synth-pop on Electronic + Rock records).
+    if song["genres"] and set(genres) - set(song["genres"]) and not shared:
         return False
     return True
 
