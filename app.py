@@ -119,8 +119,18 @@ def label_names(release):
     return names[:MAX_LABELS]
 
 
+# Later remixes and bootleg mixes ride on a label's name but aren't its sound or era.
+# Dub/version/extended/vocal mixes are kept: they're part of the original releases.
+REMIX = re.compile(
+    r"\bre-?mix(es|ed)?\b|\brmx\b|\bbootleg\b|\bmash-?up\b|"
+    r"\b(hip[ -]?hop|house|club|radio|garage|dnb|drum (?:&|and) bass|techno|trap|edm|lazy dog|deep)\s+(mix|edit|version|rework)\b",
+    re.I)
+
+
 def fits(song, album):
     """Same era, same sound. Drops e.g. 2010s house remixes from a 90s reggae label."""
+    if REMIX.search(album.get("title") or ""):
+        return False
     year = album.get("year")
     year = int(year) if str(year or "").isdigit() and int(year) > 0 else None
     if song["year"]:
