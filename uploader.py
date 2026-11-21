@@ -98,19 +98,32 @@ class YouTube:
             return None
 
     def video(self, video_id):
-        """Title, channel, description and tags of one video."""
-        d = self._post("player", {"videoId": video_id}, timeout=5)
-        vd = (d or {}).get("videoDetails") or {}
-        if not vd.get("channelId"):
+        """Title, channel and description of one video, from its watch-page data.
+
+        (The 'player' endpoint answers "sign in to confirm you're not a bot" to cloud
+        servers like Vercel; the watch-page data does not.)
+        """
+        d = self._post("next", {"videoId": video_id}, timeout=6)
+        if not d:
             return None
+        owner = next(walk(d, "videoOwnerRenderer"), None) or {}
+        channel_id = ((((owner.get("navigationEndpoint") or {}).get("browseEndpoint")) or {}).get("browseId"))
+        if not channel_id:
+            return None
+        channel = " ".join(r.get("text", "") for r in ((owner.get("title") or {}).get("runs") or []))
+        primary = next(walk(d, "videoPrimaryInfoRenderer"), None) or {}
+        title = "".join(r.get("text", "") for r in ((primary.get("title") or {}).get("runs") or []))
+        secondary = next(walk(d, "videoSecondaryInfoRenderer"), None) or {}
+        desc = ((secondary.get("attributedDescription") or {}).get("content")) or ""
+        tags = [((t.get("text") or "")) for t in ((primary.get("superTitleLink") or {}).get("runs") or [])]
         return {
             "id": video_id,
-            "title": vd.get("title") or "",
-            "channel_id": vd["channelId"],
-            "channel": vd.get("author") or "",
-            "text": " ".join([vd.get("title") or "", vd.get("shortDescription") or "", " ".join(vd.get("keywords") or [])]),
-            "description": vd.get("shortDescription") or "",
-            "tags": vd.get("keywords") or [],
+            "title": title,
+            "channel_id": channel_id,
+            "channel": channel,
+            "text": " ".join([title, desc, " ".join(tags)]),
+            "description": desc,
+            "tags": [t for t in tags if t.strip()],
         }
 
     def search(self, query):
@@ -231,7 +244,7 @@ def dig_uploads_page(token, target, budget=20):
     return tag_and_score(videos, describe(yt, videos), target), nxt
 
 
-def dig_uploader(song, song_name, artist_name, budget=22, first_pages=3):
+def dig_uploader(song, song_name, artist_name, budget=25, first_pages=2):
     """song: the Discogs match (may be None). Returns the result dict for the page, or a message."""
     yt = YouTube(time.monotonic() + budget)
 
@@ -268,7 +281,7 @@ def dig_uploader(song, song_name, artist_name, budget=22, first_pages=3):
     while videos:
         tagged += tag_and_score(videos, describe(yt, videos), target)
         pages += 1
-        if not token or pages >= first_pages or yt.time_left() < 6:
+        if not token or pages >= first_pages or yt.time_left() < 10:
             break
         videos, token = yt.uploads(token=token)
 
