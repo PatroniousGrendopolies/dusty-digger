@@ -88,19 +88,21 @@ def _num_year(y):
 def versions_of(dig, master_id):
     """Every pressing of the record, oldest first: [{id, label, year, country}], one per label+year."""
     data = dig.get(f"/masters/{master_id}/versions", per_page=100, sort="released", sort_order="asc")
-    out, seen = [], set()
+    best = {}
     for v in (data or {}).get("versions") or []:
         fmt = (v.get("format") or "").lower()
         if "unofficial" in fmt or "compilation" in fmt or not v.get("id"):
             continue
         label = clean_label((v.get("label") or "").split(",")[0]) or "no label"
         year = _num_year(v.get("released"))
+        community = ((v.get("stats") or {}).get("community") or {})
+        have = (community.get("in_collection") or 0) + (community.get("in_wantlist") or 0)
         key = (label.lower(), year)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"id": v["id"], "label": label, "year": year, "country": v.get("country") or ""})
-    out.sort(key=lambda v: (v["year"] is None, v["year"] or 0))
+        if key not in best or have > best[key]["have"]:
+            best[key] = {"id": v["id"], "label": label, "year": year, "country": v.get("country") or "", "have": have}
+    # Oldest first; within a year, the most collected pressing (the home-country original,
+    # e.g. Factory's Blue Monday rather than the German licence the same year).
+    out = sorted(best.values(), key=lambda v: (v["year"] is None, v["year"] or 0, -v["have"]))
     return out
 
 
