@@ -79,6 +79,8 @@ class YouTube:
     def __init__(self, deadline):
         self.deadline = deadline
         self.s = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=16)
+        self.s.mount("https://", adapter)
         self.s.headers.update({"User-Agent": UA, "Accept-Language": "en-US,en;q=0.9"})
         self.s.cookies.set("CONSENT", "YES+1", domain=".youtube.com")
         self.key, self.version = FALLBACK_KEY, FALLBACK_VERSION
@@ -248,26 +250,37 @@ def dig_uploader(song, song_name, artist_name, budget=25, first_pages=2):
     """song: the Discogs match (may be None). Returns the result dict for the page, or a message."""
     yt = YouTube(time.monotonic() + budget)
 
-    # 1. The original track's YouTube video: the one Discogs links for this song, else a search.
-    original_id = None
+    # 1. The original track's YouTube video. Try the videos Discogs links for this song
+    #    (the matching title first), then a YouTube search; skip removed videos and
+    #    auto-generated Topic/VEVO channels.
+    want = norm(song_name)
+    candidates = []
     if song and song.get("videos"):
-        want = norm(song_name)
-        for v in song["videos"]:
-            if want and want in norm(v.get("title")):
-                original_id = v["yt"]
-                break
-        original_id = original_id or song["videos"][0]["yt"]
-    if not original_id:
-        original_id = yt.search(" ".join(x for x in (artist_name, song_name) if x))
-    if not original_id:
-        return "Couldn't find that song on YouTube."
-    original = yt.video(original_id)
-    if original and is_robot_channel(original["channel"]):
-        other = yt.search(" ".join(x for x in (artist_name, song_name) if x))
-        if other and other != original_id:
-            original_id, original = other, yt.video(other) or original
+        vids = song["videos"]
+        candidates += [v["yt"] for v in vids if want and want in norm(v.get("title"))]
+        candidates += [v["yt"] for v in vids]
+    found = yt.search(" ".join(x for x in (artist_name, song_name) if x))
+    if found:
+        candidates.append(found)
+    original, original_id, robot = None, None, None
+    seen = set()
+    for vid in candidates:
+        if vid in seen or len(seen) >= 6:
+            continue
+        seen.add(vid)
+        info = yt.video(vid)
+        if not info:
+            continue                       # removed or unreadable: try the next one
+        if is_robot_channel(info["channel"]):
+            robot = robot or (vid, info)   # keep as a last resort
+            continue
+        original_id, original = vid, info
+        break
+    if not original and robot:
+        original_id, original = robot
     if not original:
-        return "YouTube didn't answer. Give it a minute and dig again."
+        return "Couldn't find a YouTube upload of that song to dig from." if not candidates else \
+            "YouTube didn't answer. Give it a minute and dig again."
 
     target = {
         "genres": sorted(target_genres((song or {}).get("genres"), (song or {}).get("styles"), original["text"])),
