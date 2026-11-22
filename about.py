@@ -239,10 +239,17 @@ def find_release(dig, video_title):
         if data is None:
             continue
         answered = True
+        hits = []
         for r in data.get("results") or []:
             have = set(norm(r.get("title")).split())
-            if sum(w in have for w in words) >= max(2, round(len(words) * 0.6)):
-                return r.get("id")
-            if "track" in params and norm(params["artist"]) in norm(r.get("title")):
-                return r.get("id")   # matched on the track list, so the record's own title differs
+            if (sum(w in have for w in words) >= max(2, round(len(words) * 0.6))
+                    or ("track" in params and norm(params["artist"]) in norm(r.get("title")))):
+                hits.append(r)   # (the second test: matched on the track list, record title differs)
+        if hits:
+            # The original, not a 'Best Of': skip compilations when we can, then take the oldest.
+            def rank(r):
+                comp = any(f in ("Compilation", "Unofficial Release") for f in r.get("format") or [])
+                y = str(r.get("year") or "9999")
+                return (comp, int(y) if y.isdigit() else 9999)
+            return min(hits, key=rank).get("id")
     return None if answered else BUSY
