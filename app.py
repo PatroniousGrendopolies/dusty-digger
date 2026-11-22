@@ -589,7 +589,7 @@ def about():
     prof = _artist_profile(dig, aid) if aid and not various_id(aid) else None
     if prof:
         out["members"] = [re.sub(r"\s*\(\d+\)$", "", m.get("name") or "") for m in prof.get("members") or []
-                          if m.get("active", True) and m.get("name")][:12]
+                          if m.get("name")][:12]
     if not bio and prof:
         # No Wikipedia page that's clearly them: Discogs' own profile, if anyone wrote one.
         text = about_mod.short(about_mod.clean_discogs(prof.get("profile")))
