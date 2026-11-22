@@ -31,7 +31,7 @@
         <div id="player">
             <hr>
             <b>Player</b><br>
-            <div id="yt"></div>
+            <table><tr><td valign="top"><div id="yt"></div></td><td valign="top" width="440">{% include "_about.html" %}</td></tr></table>
             <p>Now playing: <span id="now-title">loading...</span> <span id="now-sub"></span> <span id="now-count"></span></p>
             <button type="button" id="btn-prev">&lt;&lt; back</button>
             <button type="button" id="btn-play">play/pause</button>
@@ -175,6 +175,7 @@
                 $("now-title").textContent = t.name;
                 $("now-sub").textContent = tagText(t);
                 $("now-count").textContent = "[" + (pos + 1) + " of " + order.length + "]" + more;
+                if (window.showAbout) showAbout(t);
                 $("btn-keep").textContent = isKept(t) ? "un-keep" : "keep";
             }
 

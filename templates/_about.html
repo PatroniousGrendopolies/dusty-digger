@@ -1,0 +1,50 @@
+<div id="about">
+    <p><small>info about the song playing shows up here.</small></p>
+</div>
+<script>
+(function () {
+    // "About this record" beside the player: asks /about once the song has been on for a moment.
+    var cache = {}, timer = null, want = "";
+    function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+    function link(url, text) { return url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(text) + "</a>" : esc(text); }
+    function show(key, d, t) {
+        if (key !== want) return;
+        var box = document.getElementById("about"), h = "<b>About this record</b><br>";
+        if (!d || !d.found) {
+            box.innerHTML = h + "<p>" + esc(t.name) + "</p><p><small>couldn't find this one on Discogs.</small></p>";
+            return;
+        }
+        h += "<b>Artist:</b> " + esc(d.artist) + (d.track_artist ? " (this track: " + esc(d.track_artist) + ")" : "") + "<br>";
+        h += "<b>Record:</b> " + link(d.discogs_url, d.title) + "<br>";
+        if (d.labels.length) h += "<b>Label:</b> " + esc(d.labels.join(", ")) + "<br>";
+        if (d.year || d.country) h += "<b>Year:</b> " + esc(d.year || "?") + (d.country ? " (" + esc(d.country) + ")" : "") + "<br>";
+        if (d.format) h += "<b>Format:</b> " + esc(d.format) + "<br>";
+        if (d.genres.length) h += "<b>Sound:</b> " + esc(d.genres.join(", ")) + "<br>";
+        if (d.credits.length) h += "<b>Musicians and credits:</b> " + d.credits.map(function (c) { return esc(c.name) + (c.roles ? " (" + esc(c.roles) + ")" : ""); }).join("; ") + "<br>";
+        if (d.artist_bio) h += "<p><b>About the artist:</b> " + esc(d.artist_bio.text) + " <small>" + link(d.artist_bio.url, "more on " + d.artist_bio.source) + "</small></p>";
+        if (d.record) h += "<p><b>About the record:</b> " + esc(d.record.text) + " <small>" + link(d.record.url, "more on " + d.record.source) + "</small></p>";
+        if (!d.artist_bio && !d.record) h += "<p><small>no Wikipedia page for this artist or record.</small></p>";
+        box.innerHTML = h;
+    }
+    function fetchAbout(key, url, t, tries) {
+        fetch(url).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (res) {
+                if (!res.ok && res.j && res.j.retry && tries < 3) { setTimeout(function () { if (key === want) fetchAbout(key, url, t, tries + 1); }, res.j.retry * 1000); return; }
+                if (res.ok) cache[key] = res.j;
+                show(key, res.ok ? res.j : null, t);
+            })
+            .catch(function () { if (key === want) document.getElementById("about").innerHTML = "<b>About this record</b><p><small>couldn't load the info right now.</small></p>"; });
+    }
+    window.showAbout = function (t) {
+        if (!t) return;
+        var key = (t.rid || "") + "|" + t.name;
+        if (key === want) return;
+        want = key;
+        clearTimeout(timer);
+        if (cache[key]) { show(key, cache[key], t); return; }
+        document.getElementById("about").innerHTML = "<b>About this record</b><p>" + esc(t.name) + "</p><p><small>looking it up...</small></p>";
+        var url = "/about?title=" + encodeURIComponent(t.name) + (t.rid ? "&release=" + t.rid : "");
+        timer = setTimeout(function () { fetchAbout(key, url, t, 0); }, 1200);   // skipping fast doesn't burn Discogs lookups
+    };
+})();
+</script>

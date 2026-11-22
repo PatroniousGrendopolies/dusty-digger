@@ -50,7 +50,7 @@
         <div id="player">
             <hr>
             <b>Player</b><br>
-            <div id="yt"></div>
+            <table><tr><td valign="top"><div id="yt"></div></td><td valign="top" width="440">{% include "_about.html" %}</td></tr></table>
             <p>Now playing: <span id="now-title">Digging up the first track...</span> <span id="now-sub"></span> <span id="now-count"></span></p>
             <button type="button" id="btn-prev">&lt;&lt; back</button>
             <button type="button" id="btn-play">play/pause</button>
@@ -151,6 +151,7 @@
                 $("now-title").textContent = t.name;
                 $("now-sub").textContent = "(from " + t.album + ")";
                 $("now-count").textContent = "[" + (pos + 1) + " of " + order.length + "]" + more;
+                if (window.showAbout) showAbout(t);
                 var kept = isKept(t);
                 $("btn-keep").textContent = kept ? "un-keep" : "keep";
             }
@@ -286,7 +287,7 @@
                     }
                     if (v.yt && !seenIds[v.yt]) {
                         seenIds[v.yt] = true;
-                        tracks.push({ id: v.yt, name: v.name, album: title, link: v.link, secs: v.secs });
+                        tracks.push({ id: v.yt, name: v.name, album: title, link: v.link, secs: v.secs, rid: albumId });
                         order.push(tracks.length - 1);
                     }
                 });

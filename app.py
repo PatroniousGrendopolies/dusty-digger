@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from flask import Flask, jsonify, render_template, request
 
+import about as about_mod
 import uploader
 
 app = Flask(__name__)
@@ -475,7 +476,7 @@ def dig_song(token, song_name, artist_name, release_id=None):
         for v in tracks or []:
             if v.get("yt") and v["yt"] not in seen:
                 seen.add(v["yt"])
-                playlist.append({"id": v["yt"], "name": v["name"],
+                playlist.append({"id": v["yt"], "name": v["name"], "rid": a["id"],
                                  "album": album_title(a), "link": v["link"], "secs": v.get("secs")})
 
     return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"],
@@ -493,6 +494,85 @@ def dig_by_uploader(token, song_name, artist_name, release_id=None):
     if isinstance(result, dict):
         result["disc"] = disc_info(song)
     return result
+
+
+def _release_facts(release):
+    labels = []
+    for l in release.get("labels") or []:
+        name = clean_label(l.get("name"))
+        cat = (l.get("catno") or "").strip()
+        bit = name + (f" ({cat})" if cat and cat.lower() != "none" else "")
+        if name and not any(x == name or x.startswith(name + " (") for x in labels):
+            labels.append(bit)
+    fmt = []
+    for f in release.get("formats") or []:
+        for d in [f.get("name")] + (f.get("descriptions") or []):
+            if d and d not in fmt:
+                fmt.append(d)
+    rid = release.get("id")
+    return {"artist": artist_names(release.get("artists")) or "", "title": release.get("title") or "",
+            "labels": labels[:3], "year": release.get("year") or None, "country": release.get("country") or "",
+            "genres": (release.get("genres") or []) + (release.get("styles") or []), "format": ", ".join(fmt[:5]),
+            "discogs_url": release.get("uri") or (f"https://www.discogs.com/release/{rid}" if rid else "")}
+
+
+@app.route("/about")
+def about():
+    """What the page shows beside the player: Discogs facts, credits, and a few lines from Wikipedia."""
+    token = os.environ.get("DISCOGS_TOKEN")
+    video_title = request.args.get("title", "")[:300]
+    rid = request.args.get("release", "")
+    if not token:
+        return jsonify({"error": "no token"}), 503
+    dig = Digger(token)
+    dig.deadline = time.monotonic() + 9
+    if not rid.isdigit():
+        rid = about_mod.find_release(dig, video_title)
+        if not rid:
+            return jsonify({"found": False})
+    release = dig.get(f"/releases/{rid}")
+    if not release:
+        return jsonify({"retry": 5}), 429
+    out = _release_facts(release)
+    out["found"] = True
+    out["credits"] = about_mod.credits(release, video_title)
+
+    various = norm(out["artist"]).startswith("various")
+    track_artist = track_artist_for(video_title, release.get("tracklist") or [])
+    who = track_artist or ("" if various else out["artist"])
+    out["track_artist"] = who if who and who != out["artist"] else ""
+    first = re.split(r"\s+(?:&|and|feat\.?|featuring|with|vs\.?)\s+|,\s*", who or "", maxsplit=1)[0].strip()
+    hints = out["genres"] + ([out["country"]] if out["country"] else [])
+
+    song = None
+    vt = norm(video_title)
+    for t in release.get("tracklist") or []:
+        tt = norm(t.get("title"))
+        if len(tt) >= 3 and tt in vt and (song is None or len(tt) > len(norm(song))):
+            song = t.get("title")
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        bio_f = pool.submit(about_mod.artist_bio, first, hints) if first else None
+        rec_f = pool.submit(about_mod.record_blurb, out["title"], first or out["artist"])
+        song_f = (pool.submit(about_mod.record_blurb, song, first or out["artist"])
+                  if song and norm(song) != norm(out["title"]) else None)
+        bio = bio_f.result() if bio_f else None
+        rec = rec_f.result() or (song_f.result() if song_f else None)
+
+    if not bio and first:
+        # No Wikipedia page that's clearly them: Discogs' own profile, if anyone wrote one.
+        aid = next((a.get("id") for a in (release.get("artists") or []) if a.get("id")), None)
+        if track_artist:
+            for t in release.get("tracklist") or []:
+                if t.get("title") == song and t.get("artists"):
+                    aid = t["artists"][0].get("id") or aid
+        prof = dig.get(f"/artists/{aid}") if aid and dig.time_left() > 2 else None
+        text = about_mod.short(about_mod.clean_discogs((prof or {}).get("profile")))
+        if text:
+            bio = {"text": text, "url": (prof or {}).get("uri") or "", "source": "Discogs"}
+    out["artist_bio"] = bio
+    out["record"] = rec
+    return jsonify(out)
 
 
 @app.route("/uploads")
