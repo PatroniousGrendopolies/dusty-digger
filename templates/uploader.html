@@ -56,8 +56,9 @@
             <p id="dig-status"><small></small></p>
             <div class="queue"><ol id="queue"></ol></div>
             <p><b>Keepers:</b></p>
+            {% include "_keepers_account.html" %}
             <ul id="keepers"></ul>
-            <p id="keepers-empty"><small>none yet. hit keep on the good ones. saved in your browser.</small></p>
+            <p id="keepers-empty"><small>none yet. hit keep on the good ones.</small></p>
             <hr>
         </div>
 
@@ -78,7 +79,7 @@
 
             function $(id) { return document.getElementById(id); }
             function keepers() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
-            function saveKeepers(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
+            function saveKeepers(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} if (window.ddKeepers) ddKeepers.changed(list); }
             function isKept(t) { return keepers().some(function (k) { return k.id === t.id; }); }
             function current() { return tracks[order[pos]]; }
             // Full albums: long uploads (over 15 min) or "full album" in the title. Skipped when the
@@ -224,6 +225,7 @@
                 if (isKept(t)) list = list.filter(function (k) { return k.id !== t.id; });
                 else list.push({ id: t.id, name: t.name, link: t.link });
                 saveKeepers(list); renderAll();
+                if (window.ddKeepers && isKept(t)) ddKeepers.kept();
             }
 
             function shuffle() {
@@ -355,6 +357,7 @@
             var s = document.createElement("script");
             s.src = "https://www.youtube.com/iframe_api";
             document.head.appendChild(s);
+            if (window.ddKeepers) ddKeepers.start(function () { renderAll(); });
         })();
         </script>
     {% endif %}

@@ -1,0 +1,68 @@
+<p id="acct"><small></small></p>
+<script>
+(function () {
+    // Keepers follow your Google account: pulled from /keepers on load, pushed after every change.
+    var KEY = "dustyDiggerKeepers", SYNCED = "dustyDiggerSyncedFor";
+    var user = null, canSignIn = false, nudged = false, timer = null, onChange = function () {};
+    function el() { return document.querySelector("#acct small"); }
+    function local() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
+    function setLocal(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
+    function signInLink(text) { return '<a href="/login" target="_blank" rel="noopener">' + text + "</a>"; }
+    function render(note) {
+        if (user) {
+            el().innerHTML = "keepers saved to your account (" + user.email.replace(/[<>&"]/g, "") + "). " +
+                (note ? note + " " : "") + '<a href="#" id="acct-out">sign out</a>';
+            document.getElementById("acct-out").onclick = function (e) {
+                e.preventDefault();
+                fetch("/logout", { method: "POST" }).then(function () { user = null; try { localStorage.removeItem(SYNCED); } catch (x) {} render(); });
+            };
+        } else if (canSignIn && (nudged || local().length)) {
+            el().innerHTML = "kept in this browser only. " + signInLink("sign in with Google") +
+                " to keep them for good and see them on your other devices (opens a new tab, the music keeps playing).";
+        } else {
+            el().innerHTML = "";
+        }
+    }
+    function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+    function push(list) {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            fetch("/keepers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keepers: list }) })
+                .then(function (r) {
+                    if (r.status === 401) { user = null; render(); return; }
+                    render(r.ok ? "" : "(couldn't save that last change, will try again.)");
+                    if (!r.ok) setTimeout(function () { push(local()); }, 15000);
+                })
+                .catch(function () { render("(offline, will try again.)"); setTimeout(function () { push(local()); }, 15000); });
+        }, 600);
+    }
+    function pull() {
+        fetch("/keepers", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+            canSignIn = !!d.signin || !!d.user;
+            if (!d.user) { user = null; render(); return; }
+            user = d.user;
+            var mine = local(), theirs = d.keepers || [], merged;
+            var first = (function () { try { return localStorage.getItem(SYNCED) !== user.uid; } catch (e) { return true; } })();
+            if (first) {
+                // First time on this browser: add what you kept here before signing in.
+                var ids = {}; merged = theirs.slice();
+                theirs.forEach(function (k) { ids[k.id] = true; });
+                mine.forEach(function (k) { if (!ids[k.id]) merged.push(k); });
+                try { localStorage.setItem(SYNCED, user.uid); } catch (e) {}
+            } else {
+                merged = theirs;   // the account is the source of truth once synced
+            }
+            setLocal(merged);
+            if (!same(merged, theirs)) push(merged);
+            render(); onChange();
+        }).catch(function () {});
+    }
+    window.ddKeepers = {
+        start: function (cb) { onChange = cb || onChange; pull(); },
+        changed: function (list) { if (user) push(list); else render(); },
+        kept: function () { if (!user) { nudged = true; render(); } }
+    };
+    window.addEventListener("storage", function (e) { if (e.key === "ddLogin") pull(); });
+    window.addEventListener("focus", function () { if (!user && nudged) pull(); });
+})();
+</script>

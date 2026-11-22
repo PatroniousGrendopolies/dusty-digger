@@ -7,9 +7,11 @@ import requests
 from flask import Flask, jsonify, render_template, request
 
 import about as about_mod
+import accounts
 import uploader
 
 app = Flask(__name__)
+accounts.setup(app)
 
 API = "https://api.discogs.com"
 USER_AGENT = "DustyDigger/1.1 +https://dusty-digger.vercel.app"
