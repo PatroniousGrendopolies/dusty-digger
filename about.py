@@ -205,17 +205,42 @@ SEARCH_NOISE = re.compile(r"\((?:official|full album|hq|hd|audio|video|lyrics|re
                           r"\b(official (?:video|audio)|full album|hq|hd)\b", re.I)
 
 
+BUSY = object()
+
+
+def _plain(text):
+    """Drop decorations YouTube titles carry (ᴴᴰ, ★, emoji) but keep accented letters."""
+    import unicodedata
+    return "".join(c for c in text if unicodedata.category(c)[0] in "LNZ" and unicodedata.category(c) != "Lm"
+                   or c in "-'&")
+
+
 def find_release(dig, video_title):
-    """Uploader mode: turn a YouTube title into the Discogs release it most likely is."""
+    """Uploader mode: turn a YouTube title into the Discogs release it most likely is.
+
+    Returns a release id, None when Discogs has nothing that matches, or BUSY when
+    Discogs didn't answer (so the page retries instead of saying 'not found').
+    """
     q = SEARCH_NOISE.sub(" ", video_title or "")
     q = re.sub(r"\(\d{4}\)", " ", q)
-    q = re.sub(r"\s+", " ", q).strip(" -")
+    q = re.sub(r"\s+", " ", _plain(q)).strip(" -")
     words = [w for w in norm(q).split() if len(w) > 1]
     if not words:
         return None
-    data = dig.get("/database/search", q=q, type="release", per_page=10)
-    for r in (data or {}).get("results") or []:
-        have = set(norm(r.get("title")).split())
-        if sum(w in have for w in words) >= max(2, round(len(words) * 0.6)):
-            return r.get("id")
-    return None
+    tries = [{"q": q}]
+    if " - " in q:
+        left, right = q.split(" - ", 1)
+        tries.append({"artist": left.strip(), "track": right.strip()})
+    answered = False
+    for params in tries:
+        data = dig.get("/database/search", type="release", per_page=10, **params)
+        if data is None:
+            continue
+        answered = True
+        for r in data.get("results") or []:
+            have = set(norm(r.get("title")).split())
+            if sum(w in have for w in words) >= max(2, round(len(words) * 0.6)):
+                return r.get("id")
+            if "track" in params and norm(params["artist"]) in norm(r.get("title")):
+                return r.get("id")   # matched on the track list, so the record's own title differs
+    return None if answered else BUSY

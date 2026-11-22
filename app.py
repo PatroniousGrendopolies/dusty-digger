@@ -496,6 +496,26 @@ def dig_by_uploader(token, song_name, artist_name, release_id=None):
     return result
 
 
+_PROFILES = {}
+
+
+def various_id(aid):
+    return aid in (194, 355)   # Discogs' "Various" and "Unknown Artist"
+
+
+def _artist_profile(dig, aid):
+    """Discogs artist page (bio, band members), remembered for a few hours."""
+    hit = _PROFILES.get(aid)
+    if hit and time.time() - hit[0] < 6 * 3600:
+        return hit[1]
+    prof = dig.get(f"/artists/{aid}") if dig.time_left() > 2 else None
+    if prof is not None:
+        _PROFILES[aid] = (time.time(), {k: prof.get(k) for k in ("profile", "uri", "members")})
+        if len(_PROFILES) > 500:
+            _PROFILES.pop(next(iter(_PROFILES)))
+    return prof
+
+
 def _release_facts(release):
     labels = []
     for l in release.get("labels") or []:
@@ -528,6 +548,8 @@ def about():
     dig.deadline = time.monotonic() + 9
     if not rid.isdigit():
         rid = about_mod.find_release(dig, video_title)
+        if rid is about_mod.BUSY:
+            return jsonify({"retry": 6}), 429
         if not rid:
             return jsonify({"found": False})
     release = dig.get(f"/releases/{rid}")
@@ -559,17 +581,20 @@ def about():
         bio = bio_f.result() if bio_f else None
         rec = rec_f.result() or (song_f.result() if song_f else None)
 
-    if not bio and first:
+    aid = next((x.get("id") for x in (release.get("artists") or []) if x.get("id")), None)
+    if track_artist:
+        for t in release.get("tracklist") or []:
+            if t.get("title") == song and t.get("artists"):
+                aid = t["artists"][0].get("id") or aid
+    prof = _artist_profile(dig, aid) if aid and not various_id(aid) else None
+    if prof:
+        out["members"] = [re.sub(r"\s*\(\d+\)$", "", m.get("name") or "") for m in prof.get("members") or []
+                          if m.get("active", True) and m.get("name")][:12]
+    if not bio and prof:
         # No Wikipedia page that's clearly them: Discogs' own profile, if anyone wrote one.
-        aid = next((a.get("id") for a in (release.get("artists") or []) if a.get("id")), None)
-        if track_artist:
-            for t in release.get("tracklist") or []:
-                if t.get("title") == song and t.get("artists"):
-                    aid = t["artists"][0].get("id") or aid
-        prof = dig.get(f"/artists/{aid}") if aid and dig.time_left() > 2 else None
-        text = about_mod.short(about_mod.clean_discogs((prof or {}).get("profile")))
+        text = about_mod.short(about_mod.clean_discogs(prof.get("profile")))
         if text:
-            bio = {"text": text, "url": (prof or {}).get("uri") or "", "source": "Discogs"}
+            bio = {"text": text, "url": prof.get("uri") or "", "source": "Discogs"}
     out["artist_bio"] = bio
     out["record"] = rec
     return jsonify(out)

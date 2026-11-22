@@ -20,6 +20,7 @@
         if (d.year || d.country) h += "<b>Year:</b> " + esc(d.year || "?") + (d.country ? " (" + esc(d.country) + ")" : "") + "<br>";
         if (d.format) h += "<b>Format:</b> " + esc(d.format) + "<br>";
         if (d.genres.length) h += "<b>Sound:</b> " + esc(d.genres.join(", ")) + "<br>";
+        if (d.members && d.members.length) h += "<b>Members:</b> " + esc(d.members.join(", ")) + "<br>";
         if (d.credits.length) h += "<b>Musicians and credits:</b> " + d.credits.map(function (c) { return esc(c.name) + (c.roles ? " (" + esc(c.roles) + ")" : ""); }).join("; ") + "<br>";
         if (d.artist_bio) h += "<p><b>About the artist:</b> " + esc(d.artist_bio.text) + " <small>" + link(d.artist_bio.url, "more on " + d.artist_bio.source) + "</small></p>";
         if (d.record) h += "<p><b>About the record:</b> " + esc(d.record.text) + " <small>" + link(d.record.url, "more on " + d.record.source) + "</small></p>";
