@@ -95,6 +95,23 @@ def _path(user):
 
 # ---- routes
 
+PRIVACY_PAGE = """<!DOCTYPE html><html><head><title>My Flask App</title></head><body>
+<h1>Privacy</h1>
+<p>Dusty Digger works without an account. Songs you keep are saved in your own browser.</p>
+<p>If you sign in with Google, we get your Google account id, name and email address from Google and nothing
+else. We use them only to save your keepers list so it follows you between devices. Your list is stored
+in a private Vercel Blob store under a scrambled (hashed) version of your Google id, and we stay signed in
+with a cookie on your device. We don't sell, share or show any of it to anyone, and there are no ads or trackers.</p>
+<p>Searches go to Discogs, YouTube and Wikipedia to find the music and the information about it.</p>
+<p>To stop: sign out from the Keepers list. To have your saved list deleted, email patrick.bardatcha@gmail.com.</p>
+<p><a href="/">back to digging</a></p>
+</body></html>"""
+
+
+@bp.route("/privacy")
+def privacy():
+    return PRIVACY_PAGE
+
 @bp.route("/login")
 def login():
     if not configured():
