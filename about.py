@@ -222,7 +222,9 @@ def find_release(dig, video_title):
     Discogs didn't answer (so the page retries instead of saying 'not found').
     """
     q = SEARCH_NOISE.sub(" ", video_title or "")
-    q = re.sub(r"\(\d{4}\)", " ", q)
+    q = re.sub(r"#\S+", " ", q)                       # hashtags
+    q = re.sub(r"\([^)]*\)", " ", q)                  # (UK, 1983), (South Africa 1982), (excerpt)
+    q = re.sub(r"\s+[\u2013\u2014|:~]\s+", " - ", q)     # other dashes and separators
     q = re.sub(r"\s+", " ", _plain(q)).strip(" -")
     words = [w for w in norm(q).split() if len(w) > 1]
     if not words:
