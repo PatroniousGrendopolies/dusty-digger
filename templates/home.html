@@ -4,7 +4,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>My Flask App</title>
+    <title>🚧 Dusty Digger 🚜</title>
 </head>
 
 <body>
@@ -77,20 +77,23 @@
         };
         function draw() {
             var arm = ARMS[frame % 4];
-            var pile = Math.min(1 + Math.floor(loads / 3), 2);
+            // The pile keeps growing the longer the dig takes: a new layer every 2 loads, up to 9 rows.
+            var pile = Math.min(1 + Math.floor(loads / 2), 9);
+            var H = Math.max(5, pile), CENTER = 40;
             var lines = [];
-            for (var i = 0; i < 5; i++) {
-                var row = CAB[i] + arm[i];
-                if (i >= 5 - pile) {
-                    var k = i - (5 - pile), col = 34 - k;  // a heap centred under where the bucket drops
+            for (var i = 0; i < H; i++) {
+                var c = i - (H - 5);  // row of the machine (it sits on the ground, the sky grows above it)
+                var row = c >= 0 ? CAB[c] + arm[c] : "";
+                if (i >= H - pile) {
+                    var k = i - (H - pile), col = CENTER - k;  // a heap that widens toward the ground
                     while (row.length < col) row += " ";
-                    row = row.slice(0, col) + new Array(2 * k + 2).join(":");
+                    row = row.slice(0, col) + (k === 0 ? "." : new Array(2 * k + 2).join(":"));
                 }
                 lines.push(row);
             }
-            var ground = "~~~~~~~~~~~~~~~~~~~~~~~\\___/~~~~~~~~~";
+            var ground = "~~~~~~~~~~~~~~~~~~~~~~~\\___/~~~~~~~~~~~~~~~~~~~~~~~~~~~";
             lines.push(ground);
-            lines.push("  /!\\ CONSTRUCTION SITE /!\\");
+            lines.push("  /!\\ CONSTRUCTION SITE /!\\" + (pile >= 9 ? "   (that's a big pile)" : ""));
             document.getElementById("digger").textContent = lines.join("\n");
             frame++;
             if (frame % 4 === 0) loads++;
