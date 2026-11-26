@@ -33,14 +33,14 @@
             <b>Player</b><br>
             <table><tr><td valign="top"><div id="yt"></div></td><td valign="top" width="440">{% include "_about.html" %}</td></tr></table>
             <p>Now playing: <span id="now-title">loading...</span> <span id="now-sub"></span> <span id="now-count"></span></p>
+            <p><button type="button" id="btn-cast"><b>cast to tv</b></button> <small>plays on the TV straight from YouTube, so it never stutters and your Mac is free.</small></p>
+            <p id="cast-box" style="display:none"></p>
             <button type="button" id="btn-prev">&lt;&lt; back</button>
             <button type="button" id="btn-play">play/pause</button>
             <button type="button" id="btn-next">skip &gt;&gt;</button>
             <button type="button" id="btn-keep">keep</button>
             <button type="button" id="btn-shuffle">shuffle</button>
             <button type="button" id="btn-size">hide video</button>
-            <button type="button" id="btn-cast">cast to tv</button>
-            <p id="cast-box" style="display:none"></p>
             <p><label><input type="checkbox" id="skip-albums"> skip full albums (over 15 min)</label></p>
             <p><small>keys: right arrow or N = skip, left arrow = back, K = keep, space = play/pause. songs that won't play get skipped.</small></p>
 
