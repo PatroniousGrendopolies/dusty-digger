@@ -284,18 +284,25 @@
                     if (t && !broken[t.id]) ids.push(t.id);
                 }
                 if (!ids.length) return;
-                if (ready && player.pauseVideo) player.pauseVideo();
+                // Open the YouTube window right away, inside the click, so it is never popup-blocked.
+                var w = window.open("about:blank", "_blank");
+                if (w) { try { w.opener = null; } catch (e) {} }
                 var box = $("cast-box");
                 box.style.display = "";
                 box.innerHTML = "<small>making a youtube playlist...</small>";
                 var direct = "https://www.youtube.com/watch_videos?video_ids=" + ids.join(",");
                 function show(url) {
+                    if (w && !w.closed) {
+                        w.location.href = url;
+                        if (ready && player.pauseVideo) player.pauseVideo();
+                    }
                     box.innerHTML = "";
                     var a = document.createElement("a");
                     a.href = url; a.target = "_blank"; a.rel = "noopener";
-                    a.textContent = "open the next " + ids.length + " songs in YouTube";
+                    a.onclick = function () { if (ready && player.pauseVideo) player.pauseVideo(); };
+                    a.textContent = (w ? "opened the next " : "open the next ") + ids.length + " songs in YouTube" + (w ? " (click here if you don't see it)" : "");
                     var s = document.createElement("small");
-                    s.textContent = " then hit the cast button in YouTube and pick your Chromecast. kept songs stay saved here.";
+                    s.textContent = " in the YouTube window, hit the cast icon at the bottom right of the video and pick your TV. kept songs stay saved here.";
                     box.appendChild(a); box.appendChild(s);
                 }
                 fetch("/playlist?ids=" + ids.join(",")).then(function (r) { return r.json(); })
