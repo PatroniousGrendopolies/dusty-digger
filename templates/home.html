@@ -19,7 +19,12 @@
         <datalist id="artist_list"></datalist>
         Dig by:
         <input type="radio" id="mode_label" name="mode" value="label" checked><label for="mode_label">label</label> <small>(same label, same era)</small>
-        <input type="radio" id="mode_uploader" name="mode" value="uploader"><label for="mode_uploader">uploader</label> <small>(same YouTube channel)</small><br>
+        <input type="radio" id="mode_uploader" name="mode" value="uploader"><label for="mode_uploader">uploader</label> <small>(same YouTube channel)</small>
+        <input type="radio" id="mode_lists" name="mode" value="lists"><label for="mode_lists">lists</label> <small>(records on the same Discogs lists)</small><br>
+        <div id="paste-box" style="display:none">
+            <label for="list_urls">Or paste Discogs list links:</label><br>
+            <textarea id="list_urls" name="list_urls" rows="3" cols="50"></textarea><br>
+        </div>
         <input type="submit" value="Submit">
     </form>
 
@@ -73,6 +78,8 @@
         var MSGS = {
             label: ["looking up your song on Discogs...", "finding the label that first put it out...",
                     "pulling records from the same era...", "lining up the YouTube videos..."],
+            lists: ["looking up your song on Discogs...", "finding the Discogs lists it sits on...",
+                    "reading what else is on those lists...", "lining up the YouTube videos..."],
             uploader: ["finding your song on YouTube...", "finding who posted it...",
                        "digging through their uploads...", "sorting the good stuff to the top..."]
         };
@@ -121,10 +128,16 @@
             document.getElementById("digging").style.display = "none";
             document.querySelector("form").style.display = "";
         }
+        function showPaste() {
+            document.getElementById("paste-box").style.display = document.getElementById("mode_lists").checked ? "" : "none";
+        }
+        [].forEach.call(document.querySelectorAll("input[name=mode]"), function (r) { r.addEventListener("change", showPaste); });
+        showPaste();
         document.querySelector("form").addEventListener("submit", function () {
             var picked = document.querySelector("input[name=mode]:checked");
             var song = document.getElementById("song_name").value.trim(), artist = document.getElementById("artist_name").value.trim();
-            if (song || artist) start(picked ? picked.value : "label");
+            var pasted = document.getElementById("list_urls").value.trim();
+            if (song || artist || (picked && picked.value === "lists" && pasted)) start(picked ? picked.value : "label");
         });
         // Coming back with the back button: show the form again, not a frozen digger.
         window.addEventListener("pageshow", function (e) { if (e.persisted) stop(); });

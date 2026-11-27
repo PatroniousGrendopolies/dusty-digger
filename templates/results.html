@@ -45,8 +45,15 @@
 
     {% if result is string %}
         <p>{{ result }}</p>
+        {% if form and form.need_paste %}{% include "_paste_lists.html" %}{% endif %}
     {% else %}
+        {% if result.lists_used %}
+        <p>Lists used:</p>
+        <ul>{% for l in result.lists_used %}<li><a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.name }}</a> <small>({{ l.size }} records)</small></li>{% endfor %}</ul>
+        <p>{% if result.albums %}Records that sit on the same lists, most shared first.{% else %}Nothing else turned up on those lists.{% endif %}</p>
+        {% else %}
         <p>We've unearthed something. This song was originally put out by {{ ", ".join(result.label_names) }}{% if result.year %} in {{ result.year }}{% endif %}.{% if result.albums %} Here's what else they released {% if result.year %}around then ({{ result.year - 4 }} to {{ result.year + 4 }}) {% endif %}in the same style:{% else %} We couldn't dig up other releases from them {% if result.year %}from that era {% endif %}this time.{% endif %}</p>
+        {% endif %}
 
         {% if result.albums %}
         <div id="player">

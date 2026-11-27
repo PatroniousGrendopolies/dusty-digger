@@ -8,6 +8,7 @@ from flask import Flask, jsonify, render_template, request
 
 import about as about_mod
 import accounts
+import lists as lists_mod
 import uploader
 
 app = Flask(__name__)
@@ -456,8 +457,16 @@ def dig_song(token, song_name, artist_name, release_id=None):
 
     albums = get_top_albums(dig, song)
 
-    # Track lists cost one request per album. Fetch what Discogs' per-minute allowance
-    # leaves room for now; the browser fetches the rest a few seconds apart (/tracks).
+    out, playlist = fill_tracks(dig, [{"id": a["id"], "title": album_title(a), "rating": popularity(a)} for a in albums])
+    return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"],
+            "disc": disc_info(song)}
+
+
+def fill_tracks(dig, albums):
+    """albums: [{id, title, rating}] -> (albums with tracks, playlist).
+
+    Track lists cost one request per album. Fetch what Discogs' per-minute allowance
+    leaves room for now; the browser fetches the rest a few seconds apart (/tracks)."""
     budget = len(albums) if dig.remaining is None else max(0, min(len(albums), dig.remaining - RESERVE))
     videos = {}
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -473,16 +482,52 @@ def dig_song(token, song_name, artist_name, release_id=None):
     out, playlist, seen = [], [], set()
     for a in albums:
         tracks = videos.get(a["id"])
-        out.append({"id": a["id"], "title": album_title(a), "rating": popularity(a),
+        out.append({"id": a["id"], "title": a["title"], "rating": a["rating"],
                     "tracks": tracks or [], "pending": tracks is None})
         for v in tracks or []:
             if v.get("yt") and v["yt"] not in seen:
                 seen.add(v["yt"])
                 playlist.append({"id": v["yt"], "name": v["name"], "rid": a["id"],
-                                 "album": album_title(a), "link": v["link"], "secs": v.get("secs")})
+                                 "album": a["title"], "link": v["link"], "secs": v.get("secs")})
+    return out, playlist
 
-    return {"label_names": song["labels"], "year": song["year"], "albums": out, "playlist": playlist, "song": song["name"],
-            "disc": disc_info(song)}
+
+class NeedPaste(Exception):
+    """Lists mode couldn't find the lists by itself; the page offers a paste box."""
+
+    def __init__(self, message, release_id=None):
+        super().__init__(message)
+        self.release_id = release_id
+
+
+def dig_lists(token, song_name, artist_name, release_id=None, pasted=""):
+    """Records on the same Discogs lists as the song's ORIGINAL release (or as pasted lists)."""
+    dig = Digger(token)
+    song = None
+    if song_name or artist_name:
+        song = search_song(dig, song_name, artist_name, release_id)
+        if song is None and not pasted.strip():
+            return NO_MATCH
+    refs = lists_mod.parse_list_refs(pasted)
+    if not refs:
+        if song is None:
+            return NO_MATCH
+        try:
+            refs = lists_mod.finder_lists(song["id"])
+        except lists_mod.FinderDown:
+            raise NeedPaste("Dusty Digger couldn't read the Discogs lists for this record just now.", song["id"])
+        if not refs:
+            raise NeedPaste("This record isn't on any Discogs lists.", song["id"])
+    seed_ids = {song["id"]} if song else set()
+    seed_key = norm(song["name"]) if song else None
+    used, recs = lists_mod.collect(dig, refs, seed_ids, seed_key, norm, MAX_ALBUMS)
+    if not used:
+        raise NeedPaste("None of those lists could be used (too long, private or unreadable).", song["id"] if song else None)
+    albums = [{"id": r["id"], "title": r["title"],
+               "rating": f"on {len(r['lists'])} of {len(used)} lists"} for r in recs]
+    out, playlist = fill_tracks(dig, albums)
+    return {"lists_used": used, "albums": out, "playlist": playlist, "song": song["name"] if song else None,
+            "year": song["year"] if song else None, "label_names": [], "disc": disc_info(song)}
 
 
 def dig_by_uploader(token, song_name, artist_name, release_id=None):
@@ -687,7 +732,7 @@ def home():
     if request.method == "POST":
         song_name = (request.form.get("song_name") or "").strip()
         artist_name = (request.form.get("artist_name") or "").strip()
-        if not song_name and not artist_name:
+        if not song_name and not artist_name and not (request.form.get("list_urls") or "").strip():
             return render_template("home.html")
         token = os.environ.get("DISCOGS_TOKEN")
         query = " by ".join(x for x in (song_name, artist_name) if x)
@@ -704,7 +749,14 @@ def home():
         if not token:
             return render_template("results.html", result=NO_TOKEN, query="")
         try:
-            result = dig_song(token, song_name, artist_name, release_id)
+            if form["mode"] == "lists":
+                result = dig_lists(token, song_name, artist_name, release_id, request.form.get("list_urls") or "")
+            else:
+                result = dig_song(token, song_name, artist_name, release_id)
+        except NeedPaste as e:
+            form["need_paste"] = True
+            form["release_id"] = e.release_id
+            result = str(e)
         except DiscogsError as e:
             result = str(e)
         except Exception:

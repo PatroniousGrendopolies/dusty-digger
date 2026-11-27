@@ -1,0 +1,9 @@
+<form action="/" method="post" onsubmit="this.querySelector('input[type=submit]').value='digging...'">
+    <input type="hidden" name="song_name" value="{{ form.song_name }}">
+    <input type="hidden" name="artist_name" value="{{ form.artist_name }}">
+    <input type="hidden" name="mode" value="lists">
+    {% if form.release_id %}<input type="hidden" name="release_id" value="{{ form.release_id }}">{% endif %}
+    <label for="list_urls">Paste Discogs list links (or list numbers), one per line:</label><br>
+    <textarea id="list_urls" name="list_urls" rows="4" cols="60"></textarea><br>
+    <input type="submit" value="dig these lists">
+</form>
