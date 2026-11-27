@@ -91,7 +91,7 @@
                 if (!d.user) {
                     user = null; items = local();
                     show("who", false); show("signin", !!d.signin); show("localnote", items.length > 0);
-                    $("status").textContent = !d.signin ? "signing in isn't switched on yet." : items.length ? "" : "sign in with Google to see your kept songs.";
+                    $("status").textContent = d.signin ? "" : "signing in isn't switched on yet.";
                     show("status", !!$("status").textContent);
                     render(); return;
                 }
