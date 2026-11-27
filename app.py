@@ -518,6 +518,9 @@ def dig_lists(token, song_name, artist_name, release_id=None, pasted=""):
             raise NeedPaste("Dusty Digger couldn't read the Discogs lists for this record just now.", song["id"])
         if not refs:
             raise NeedPaste("This record isn't on any Discogs lists.", song["id"])
+    # The finder can take most of a search's time budget (it waits on Discogs' page); the
+    # list and track lookups after it get a fresh one.
+    dig.deadline = time.monotonic() + TIME_BUDGET
     seed_ids = {song["id"]} if song else set()
     seed_key = norm(song["name"]) if song else None
     used, recs = lists_mod.collect(dig, refs, seed_ids, seed_key, norm, MAX_ALBUMS)
@@ -765,17 +768,6 @@ def home():
         return render_template("results.html", result=result, query=query, form=form)
 
     return render_template("home.html")
-
-
-@app.route("/_listcheck")
-def _listcheck():
-    dig = Digger(os.environ.get("DISCOGS_TOKEN"))
-    r = dig.session.get(f"{API}/lists/277616", timeout=10)
-    try:
-        j = r.json()
-    except ValueError:
-        j = {}
-    return jsonify({"status": r.status_code, "keys": list(j)[:15], "items": type(j.get("items")).__name__, "n": len(j.get("items") or []) if isinstance(j.get("items"), list) else j.get("items"), "remaining": r.headers.get("X-Discogs-Ratelimit-Remaining"), "body": r.text[:200] if r.status_code != 200 else ""})
 
 
 if __name__ == "__main__":
