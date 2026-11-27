@@ -85,15 +85,17 @@ def rank_records(lists, seed_ids, seed_key, norm, limit=40):
 
 
 def collect(dig, refs, seed_ids, seed_key, norm, limit=40):
-    """refs: [{id, name?, url?}] -> (lists_used, ranked records). Skips big and unreadable lists."""
+    """refs: [{id, name?, url?}] -> (lists_used, ranked records, how many lists were too long). Skips big and unreadable lists."""
     refs = refs[:MAX_LISTS]
     with ThreadPoolExecutor(max_workers=4) as pool:
         fetched = list(pool.map(lambda ref: fetch_list(dig, ref["id"]), refs))
-    used = []
+    used, big = [], 0
     for ref, f in zip(refs, fetched):
+        if f is not None and len(f["items"]) > BIG_LIST:
+            big += 1
         if f is None or len(f["items"]) > BIG_LIST:
             continue
         f["name"] = ref.get("name") or f["name"]
         used.append(f)
     recs = rank_records(used, seed_ids, seed_key, norm, limit)
-    return [{"id": u["id"], "name": u["name"], "url": u["url"], "size": len(u["items"])} for u in used], recs
+    return [{"id": u["id"], "name": u["name"], "url": u["url"], "size": len(u["items"])} for u in used], recs, big

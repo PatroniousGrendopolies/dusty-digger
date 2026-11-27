@@ -523,9 +523,11 @@ def dig_lists(token, song_name, artist_name, release_id=None, pasted=""):
     dig.deadline = time.monotonic() + TIME_BUDGET
     seed_ids = {song["id"]} if song else set()
     seed_key = norm(song["name"]) if song else None
-    used, recs = lists_mod.collect(dig, refs, seed_ids, seed_key, norm, MAX_ALBUMS)
+    used, recs, big = lists_mod.collect(dig, refs, seed_ids, seed_key, norm, MAX_ALBUMS)
     if not used:
-        raise NeedPaste("None of those lists could be used (too long, private or unreadable).", song["id"] if song else None)
+        msg = ("The lists this record is on are all very long catalogues (over %d records), which say little about it." % lists_mod.BIG_LIST
+               if big == len(refs) else "None of those lists could be used (too long, private or unreadable).")
+        raise NeedPaste(msg, song["id"] if song else None)
     albums = [{"id": r["id"], "title": r["title"],
                "rating": f"on {len(r['lists'])} of {len(used)} lists"} for r in recs]
     out, playlist = fill_tracks(dig, albums)

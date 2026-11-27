@@ -74,17 +74,23 @@ async function evalRetry(expression, tries = 4) {
 
 const READ = `(async () => {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const start = location.pathname;
+  if (!/^\\/(?:[a-z]{2}\\/)?release\\//.test(start)) return { heading: false, lists: [], note: "not a release page" };
   window.scrollTo(0, document.body.scrollHeight / 2);
   await sleep(4000);
-  const heading = () => [...document.querySelectorAll("h1,h2,h3,h4,header")].find((x) => /^Lists\\b/.test(x.textContent.trim()));
+  const heading = () => [...document.querySelectorAll("h2")].find((x) => x.textContent.trim() === "Lists");
   let h = heading();
   if (!h) { window.scrollTo(0, document.body.scrollHeight * 0.75); await sleep(3000); h = heading(); }
   if (!h) return { heading: false, lists: [] };
-  const box = () => { let n = h; for (let i = 0; i < 5 && n; i++) { n = n.parentElement; if (n && n.querySelectorAll("a[href*='/lists/']").length) return n; } return document; };
-  const more = [...box().querySelectorAll("button,a")].find((b) => /(show|see|view)?\\s*(all|more)\\b.*list|more lists|show more/i.test(b.textContent.trim()) && !/\\/lists\\/\\d/.test(b.href || ""));
+  // The section is the nearest ancestor that also holds the section's other content (links or an add button).
+  const box = () => { let n = h.parentElement; for (let i = 0; i < 4 && n; i++, n = n.parentElement) { if (n.querySelectorAll("h2").length > 1) break; if (n.querySelectorAll("a[href*='/lists/']").length) return n; } return null; };
+  // Only a real button may be clicked (never a link: the page must stay on this release).
+  let b0 = box();
+  const more = b0 && [...b0.querySelectorAll("button")].find((b) => /more|all/i.test(b.textContent.trim()) && !/add/i.test(b.textContent));
   if (more) { more.click(); await sleep(3000); }
+  const b1 = box();
   const seen = new Set(), lists = [];
-  for (const a of box().querySelectorAll("a[href*='/lists/']")) {
+  if (b1 && location.pathname === start) for (const a of b1.querySelectorAll("a[href*='/lists/']")) {
     const m = a.href.match(/\\/lists\\/(?:[^/]+\\/)?(\\d+)/);
     if (!m || seen.has(m[1])) continue;
     const name = a.textContent.trim();
