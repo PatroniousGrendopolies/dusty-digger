@@ -767,6 +767,17 @@ def home():
     return render_template("home.html")
 
 
+@app.route("/_listcheck")
+def _listcheck():
+    dig = Digger(os.environ.get("DISCOGS_TOKEN"))
+    r = dig.session.get(f"{API}/lists/277616", timeout=10)
+    try:
+        j = r.json()
+    except ValueError:
+        j = {}
+    return jsonify({"status": r.status_code, "keys": list(j)[:15], "items": type(j.get("items")).__name__, "n": len(j.get("items") or []) if isinstance(j.get("items"), list) else j.get("items"), "remaining": r.headers.get("X-Discogs-Ratelimit-Remaining"), "body": r.text[:200] if r.status_code != 200 else ""})
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5008)
 
