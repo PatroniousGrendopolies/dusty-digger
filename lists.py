@@ -69,7 +69,7 @@ def rank_records(lists, seed_ids, seed_key, norm, limit=40):
         for it in lst["items"]:
             if it.get("type") != "release" or not it.get("id"):
                 continue
-            title = it.get("display_title") or ""
+            title = re.sub(r"\s\(\d+\)(?=\s-\s)", "", it.get("display_title") or "")  # Discogs' "Gypsy (15)" numbering
             key = norm(title)
             if not key or it["id"] in seed_ids or key == seed_key:
                 continue
