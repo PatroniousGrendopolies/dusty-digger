@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>🚧 Dusty Digger 🚜</title>
+    <style>
+        .current { font-weight: bold; }
+        .compact #yt, .compact iframe { display: none; }
+    </style>
+</head>
+
+<body>
+
+    <p><a href="/">&lt;&lt; new search</a></p>
+
+    <h1>Kept songs</h1>
+
+    <p id="status">loading...</p>
+    <p id="signin" style="display:none"><a href="/login" target="_blank" rel="noopener">sign in with Google</a> to see your kept songs on any device <small>(opens a new tab)</small></p>
+    <p id="who" style="display:none"><small><span id="email"></span> <a href="#" id="signout">sign out</a></small></p>
+    <p id="localnote" style="display:none"><small>These are only saved in this browser. Sign in to keep them for good and see them on your other devices.</small></p>
+
+    <div id="listbox" style="display:none">
+        <hr>
+        <p id="count"></p>
+        <ol id="list"></ol>
+        <hr>
+        <b>Play these</b><br>
+        <div id="yt"></div>
+        <p>Now playing: <span id="now">nothing yet</span></p>
+        <button type="button" id="btn-playall">play these</button>
+        <button type="button" id="btn-prev">&lt;&lt; back</button>
+        <button type="button" id="btn-play">play/pause</button>
+        <button type="button" id="btn-next">skip &gt;&gt;</button>
+        <button type="button" id="btn-shuffle">shuffle</button>
+        <p><a id="cast" href="#" target="_blank" rel="noopener">cast to tv / open in YouTube</a> <small>(first 50 songs)</small></p>
+    </div>
+
+    <script>
+    (function () {
+        var KEY = "dustyDiggerKeepers", SYNCED = "dustyDiggerSyncedFor";
+        var user = null, items = [], pos = -1, player = null, ready = false, playing = false, timer = null;
+        function $(id) { return document.getElementById(id); }
+        function local() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
+        function setLocal(l) { try { localStorage.setItem(KEY, JSON.stringify(l)); } catch (e) {} }
+        function show(id, on) { $(id).style.display = on ? "" : "none"; }
+
+        function render() {
+            var ol = $("list"); ol.innerHTML = "";
+            items.forEach(function (k, i) {
+                var li = document.createElement("li"), a = document.createElement("a");
+                a.href = k.link || ("https://www.youtube.com/watch?v=" + k.id); a.target = "_blank"; a.rel = "noopener";
+                a.textContent = k.name || k.id;
+                if (i === pos) li.className = "current";
+                li.appendChild(a);
+                var bits = [];
+                if (k.album) bits.push("from " + k.album);
+                if (k.year) bits.push(k.year);
+                if (k.at) bits.push("kept " + new Date(k.at).toLocaleDateString());
+                if (bits.length) li.appendChild(document.createTextNode(" (" + bits.join(", ") + ")"));
+                var rm = document.createElement("button"); rm.type = "button"; rm.textContent = "remove";
+                rm.onclick = function () { remove(k.id); };
+                li.appendChild(document.createTextNode(" ")); li.appendChild(rm);
+                ol.appendChild(li);
+            });
+            $("count").textContent = items.length + (items.length === 1 ? " kept song" : " kept songs");
+            show("listbox", items.length > 0);
+            if (user && !items.length) { $("status").textContent = "nothing kept yet. hit keep on the good ones."; show("status", true); }
+        }
+
+        function save() {
+            setLocal(items);
+            if (!user) return;
+            fetch("/keepers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ keepers: items }) })
+                .then(function (r) { if (!r.ok) $("status").textContent = "couldn't save that change, try again."; })
+                .catch(function () { $("status").textContent = "offline, couldn't save that change."; });
+        }
+        function remove(id) {
+            var cur = pos >= 0 && items[pos] ? items[pos].id : null;
+            items = items.filter(function (k) { return k.id !== id; });
+            pos = cur ? items.findIndex(function (k) { return k.id === cur; }) : -1;
+            save(); render();
+        }
+
+        function load() {
+            fetch("/keepers", { cache: "no-store" }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
+                var d = x.d;
+                if (d.error) { $("status").textContent = "couldn't load your kept songs just now. reload to try again."; return; }
+                if (!d.user) {
+                    user = null; items = local();
+                    show("who", false); show("signin", !!d.signin); show("localnote", items.length > 0);
+                    $("status").textContent = !d.signin ? "signing in isn't switched on yet." : items.length ? "" : "sign in with Google to see your kept songs.";
+                    show("status", !!$("status").textContent);
+                    render(); return;
+                }
+                user = d.user; $("email").textContent = user.email;
+                var theirs = d.keepers || [], first = true;
+                try { first = localStorage.getItem(SYNCED) !== user.uid; } catch (e) {}
+                var merged = theirs.slice(), seen = {};
+                theirs.forEach(function (k) { seen[k.id] = true; });
+                if (first) {
+                    local().forEach(function (k) { if (!seen[k.id]) merged.push(k); });
+                    try { localStorage.setItem(SYNCED, user.uid); } catch (e) {}
+                }
+                items = merged; setLocal(items);
+                if (merged.length !== theirs.length) save();
+                show("signin", false); show("localnote", false); show("who", true); show("status", false);
+                render();
+            }).catch(function () { $("status").textContent = "couldn't load your kept songs just now. reload to try again."; });
+        }
+
+        // ---- plain player over the kept list
+        function playAt(i) {
+            if (i < 0 || i >= items.length) { $("now").textContent = "end of the list."; return; }
+            pos = i; $("now").textContent = items[i].name || items[i].id; render();
+            if (ready) player.loadVideoById(items[i].id);
+        }
+        function next() { playAt(pos + 1); }
+        function startPlayer(then) {
+            if (player) { then(); return; }
+            window.onYouTubeIframeAPIReady = function () {
+                player = new YT.Player("yt", { height: "270", width: "440", playerVars: { playsinline: 1 }, events: {
+                    onReady: function () { ready = true; then(); },
+                    onStateChange: function (e) { if (e.data === 0) next(); },
+                    onError: function () { next(); } } });
+            };
+            var s = document.createElement("script"); s.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(s);
+        }
+        $("btn-playall").onclick = function () { if (items.length) startPlayer(function () { playAt(pos >= 0 ? pos : 0); }); };
+        $("btn-next").onclick = function () { if (items.length) startPlayer(next); };
+        $("btn-prev").onclick = function () { if (pos > 0) playAt(pos - 1); };
+        $("btn-play").onclick = function () {
+            if (!ready) return;
+            if (player.getPlayerState() === 1) player.pauseVideo(); else player.playVideo();
+        };
+        $("btn-shuffle").onclick = function () {
+            var cur = pos >= 0 ? items[pos] : null, rest = items.filter(function (k) { return k !== cur; });
+            for (var i = rest.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = rest[i]; rest[i] = rest[j]; rest[j] = t; }
+            items = cur ? [cur].concat(rest) : rest; pos = cur ? 0 : -1; setLocal(items); save(); render();
+        };
+        // cast: resolve a YouTube playlist link; open the window inside the click so it isn't blocked
+        $("cast").onclick = function (e) {
+            e.preventDefault();
+            var ids = items.slice(0, 50).map(function (k) { return k.id; }).join(",");
+            if (!ids) return;
+            var w = window.open("about:blank", "_blank");
+            fetch("/playlist?ids=" + ids).then(function (r) { return r.json(); }).then(function (d) {
+                if (d.url) { if (w) w.location = d.url; else location.href = d.url; } else if (w) w.close();
+            }).catch(function () { if (w) w.close(); });
+        };
+
+        $("signout").onclick = function (e) {
+            e.preventDefault();
+            fetch("/logout", { method: "POST" }).then(function () { try { localStorage.removeItem(SYNCED); } catch (x) {} pos = -1; load(); });
+        };
+        window.addEventListener("storage", function (e) { if (e.key === "ddLogin") load(); });
+        window.addEventListener("focus", function () { if (!user) load(); });
+        load();
+    })();
+    </script>
+
+</body>
+
+</html>

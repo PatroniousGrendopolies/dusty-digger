@@ -16,7 +16,7 @@ from datetime import timedelta
 from urllib.parse import urlencode, urlparse
 
 import requests
-from flask import Blueprint, abort, jsonify, redirect, render_template_string, request, session
+from flask import Blueprint, abort, jsonify, redirect, render_template, render_template_string, request, session
 
 bp = Blueprint("accounts", __name__)
 
@@ -29,8 +29,8 @@ YT_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 DONE_PAGE = """<!DOCTYPE html><html><head><title>My Flask App</title></head><body>
 <p>{{ msg }}</p>
-<p><a href="/" onclick="window.close(); return false;">close this tab</a> and go back to your music.</p>
-<script>try { localStorage.setItem("ddLogin", String(Date.now())); } catch (e) {} setTimeout(function () { window.close(); }, 1500);</script>
+<p><a href="/kept">see your kept songs</a> or <a href="/" onclick="window.close(); return false;">close this tab</a> and go back to your music.</p>
+<script>try { localStorage.setItem("ddLogin", String(Date.now())); } catch (e) {} setTimeout(function () { window.close(); }, 800);</script>
 </body></html>"""
 
 
@@ -112,6 +112,14 @@ with a cookie on your device. We don't sell, share or show any of it to anyone, 
 def privacy():
     return PRIVACY_PAGE
 
+KEPT_VIEW = "kept.html"
+
+
+@bp.route("/kept")
+def kept_page():
+    return render_template(KEPT_VIEW)
+
+
 @bp.route("/login")
 def login():
     if not configured():
@@ -127,7 +135,7 @@ def login():
 def callback():
     state = session.pop("oauth_state", None)
     if not state or request.args.get("state") != state or not request.args.get("code"):
-        return render_template_string(DONE_PAGE, msg="That sign-in didn't go through. Try again from the Keepers list."), 400
+        return render_template_string(DONE_PAGE, msg="That sign-in didn't go through. Try again."), 400
     try:
         r = requests.post(GOOGLE_TOKEN, timeout=10, data={
             "code": request.args["code"], "client_id": os.environ["GOOGLE_CLIENT_ID"],
@@ -146,7 +154,7 @@ def callback():
     session.permanent = True
     session["user"] = {"uid": uid(claims["sub"]), "email": claims.get("email") or "",
                        "name": claims.get("given_name") or claims.get("name") or claims.get("email") or "you"}
-    return render_template_string(DONE_PAGE, msg=f"Signed in as {session['user']['email']}. Your keepers are saved to your account now.")
+    return render_template_string(DONE_PAGE, msg=f"Signed in, you can close this tab. Your keepers are saved to your account ({session['user']['email']}).")
 
 
 @bp.route("/logout", methods=["POST"])
@@ -170,7 +178,9 @@ def clean_keepers(items):
             continue
         seen.add(k["id"])
         out.append({"id": k["id"], "name": str(k.get("name") or "")[:300], "album": str(k.get("album") or "")[:300],
-                    "link": str(k.get("link") or "")[:500]})
+                    "link": str(k.get("link") or "")[:500],
+                    "year": k["year"] if isinstance(k.get("year"), int) and 0 < k["year"] < 3000 else 0,
+                    "at": k["at"] if isinstance(k.get("at"), int) and 0 < k["at"] < 10**14 else 0})
         if len(out) >= MAX_KEEPERS:
             break
     return out

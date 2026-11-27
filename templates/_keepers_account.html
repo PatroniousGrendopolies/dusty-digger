@@ -3,7 +3,7 @@
 (function () {
     // Keepers follow your Google account: pulled from /keepers on load, pushed after every change.
     var KEY = "dustyDiggerKeepers", SYNCED = "dustyDiggerSyncedFor";
-    var user = null, canSignIn = false, nudged = false, timer = null, onChange = function () {};
+    var user = null, canSignIn = null, nudged = false, prompted = false, timer = null, onChange = function () {};
     function el() { return document.querySelector("#acct small"); }
     function local() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
     function setLocal(list) { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (e) {} }
@@ -60,7 +60,13 @@
     window.ddKeepers = {
         start: function (cb) { onChange = cb || onChange; pull(); },
         changed: function (list) { if (user) push(list); else render(); },
-        kept: function () { if (!user) { nudged = true; render(); } }
+        kept: function () {
+            if (user) return;
+            nudged = true; render();
+            // Sign-in opens in its own tab, straight from the click (a popup opened after an await would be blocked).
+            // Only once per page: if he closes it, a later Keep doesn't nag.
+            if (!prompted && canSignIn !== false) { prompted = true; try { window.open("/login", "_blank"); } catch (e) {} }
+        }
     };
     window.addEventListener("storage", function (e) { if (e.key === "ddLogin") pull(); });
     window.addEventListener("focus", function () { if (!user && nudged) pull(); });

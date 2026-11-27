@@ -37,7 +37,7 @@
 
 <body>
 
-    <p><a href="/">&lt;&lt; new search</a></p>
+    <p><a href="/">&lt;&lt; new search</a> | <a href="/kept">kept songs</a></p>
 
     <h1>Results</h1>
 
@@ -203,7 +203,7 @@
                 if (!hasTracks()) return;
                 var t = current(), list = keepers();
                 if (isKept(t)) list = list.filter(function (k) { return k.id !== t.id; });
-                else list.push({ id: t.id, name: t.name, album: t.album, link: t.link });
+                else list.push({ id: t.id, name: t.name, album: t.album || "", link: t.link, year: t.year || 0, at: Date.now() });
                 saveKeepers(list); renderAll();
                 if (window.ddKeepers && isKept(t)) ddKeepers.kept();
             }

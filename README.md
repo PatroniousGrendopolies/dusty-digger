@@ -22,3 +22,6 @@ Then open http://localhost:5008.
 
 
 **Two ways to dig:** *by label* (the record label that first released the song, same era and style, via Discogs) or *by uploader* (everything else posted by the YouTube channel that uploaded the song, usually a crate-digging collector, ranked by genre, year and artist, with genre checkboxes). The uploader mode reads YouTube's public web pages, so it needs no API key.
+
+
+**Kept songs:** pressing Keep saves the song in your browser straight away. If you're not signed in, it also opens Google sign-in in a new tab (once per page, the music keeps playing) so your keepers can follow you between devices. The `/kept` page ("kept songs" link at the top of every page) lists your kept songs with artist, title, record, year and date kept, a `remove` button, a small player ("play these", shuffle, skip) and a "cast to tv / open in YouTube" link for the first 50. Signed out, it shows a sign-in link and whatever is kept in this browser. Keepers live in a private Vercel Blob store; the Google redirect URI is `https://dusty-digger.vercel.app/auth/callback`.
